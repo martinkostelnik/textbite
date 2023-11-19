@@ -1,0 +1,9 @@
+__pycache__/
+data/
+tmp/
+textbite.egg-info/
+*.pkl
+sources.txt
+export.json
+mapping.txt
+textbite/existing_methods/stopwords/
