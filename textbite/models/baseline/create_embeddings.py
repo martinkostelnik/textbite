@@ -8,8 +8,7 @@ from transformers import BertModel, BertTokenizerFast
 from textbite.models.baseline.utils import Sample
 from textbite.utils import LineLabel
 
-
-CZERT_PATH = r"UWB-AIR/Czert-B-base-cased"
+from textbite.utils import CZERT_PATH
 
 
 def parse_arguments():

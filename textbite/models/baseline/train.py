@@ -1,4 +1,5 @@
 import sys
+import os
 import argparse
 import logging
 from typing import Tuple
@@ -31,6 +32,8 @@ def parse_arguments():
     parser.add_argument("-e", type=int, default=50, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
 
+    parser.add_argument("--save", type=str, help="Where to save the model")
+
     args = parser.parse_args()
     return args
 
@@ -58,12 +61,15 @@ def train(
         val_loader: DataLoader,
         epochs: int,
         lr: float,
+        save_path: str,
     ):
     model.train()
 
     optim = torch.optim.Adam(model.parameters(), lr)
-    # criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.02, 0.49, 0.49]).to(device))
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.01, 0.799, 0.2]).to(device))
+    # criterion = torch.nn.CrossEntropyLoss()
+
+    best_f1_val = 0.0
 
     for epoch in range(epochs):
         epoch_labels = []
@@ -81,7 +87,6 @@ def train(
             outputs = model(embeddings)
             loss = criterion(outputs, labels)
             preds = torch.argmax(outputs, dim=1)
-            # print(loss.item())
 
             loss.backward()
             optim.step()
@@ -103,6 +108,15 @@ def train(
             epoch_preds_val.extend(preds.cpu())
 
         f1 = f1_score(epoch_labels, epoch_preds, average="weighted")
+        f1_val = f1_score(epoch_labels_val, epoch_preds_val, average="weighted")
+
+        if f1_val > best_f1_val:
+            best_f1_val = f1_val
+            torch.save({"state_dict": model.state_dict(),
+                        "n_layers": model.n_layers, 
+                        "hidden_size": model.hidden_size},
+                        os.path.join(save_path, "BaselineModel.pth"))
+
         print(f"Epoch {epoch + 1} finished | f1 = {f1:.2f} | Predicts zeros: {not any(preds)}")
         if not (epoch + 1) % 10:
             print("TRAIN REPORT:")
@@ -142,6 +156,7 @@ def main(args):
         val_loader=val_loader,
         epochs=args.e,
         lr=args.lr,
+        save_path=args.save,
     )
     end = perf_counter()
     t = end - start

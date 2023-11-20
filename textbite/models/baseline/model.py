@@ -21,9 +21,9 @@ class BaselineModel(nn.Module):
         self.hidden_size = hidden_size
         self.activation = activation
         self.dropout_prob = dropout_prob
-        self.context = context
+        self.context = context 
 
-        self.input_size = 4
+        self.input_size = 768
         self.output_size = 3
 
         self.layers = nn.ModuleList()
