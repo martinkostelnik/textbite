@@ -66,7 +66,7 @@ def train(
     model.train()
 
     optim = torch.optim.Adam(model.parameters(), lr)
-    criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.01, 0.799, 0.2]).to(device))
+    criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.16, 0.42, 0.42]).to(device))
     # criterion = torch.nn.CrossEntropyLoss()
 
     best_f1_val = 0.0
@@ -107,11 +107,12 @@ def train(
             epoch_labels_val.extend(labels.cpu())
             epoch_preds_val.extend(preds.cpu())
 
-        f1 = f1_score(epoch_labels, epoch_preds, average="weighted")
-        f1_val = f1_score(epoch_labels_val, epoch_preds_val, average="weighted")
+        f1 = f1_score(epoch_labels, epoch_preds, average="macro")
+        f1_val = f1_score(epoch_labels_val, epoch_preds_val, average="macro")
 
         if f1_val > best_f1_val:
             best_f1_val = f1_val
+            print(f"SAVING MODEL at f1_val = {f1_val}")
             torch.save({"state_dict": model.state_dict(),
                         "n_layers": model.n_layers, 
                         "hidden_size": model.hidden_size},

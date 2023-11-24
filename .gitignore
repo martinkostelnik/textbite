@@ -7,4 +7,5 @@ sources.txt
 export.json
 mapping.txt
 textbite/existing_methods/stopwords/
-models/
+./models/
+test-data/

@@ -101,18 +101,25 @@ def create_mapping(
         regions: List[AnnotatedRegion],
         pagexml: PageLayout,
     ) -> None:
-    for region in pagexml.regions:
-        for line in region.lines:
-            map_line(line, regions)
+        for line in pagexml.lines_iterator():
+            if line.transcription:
+                map_line(line, regions)
 
 
 def map_line(line: TextLine, regions: List[AnnotatedRegion]) -> None:
     line_bbox: Rectangle = get_polygon_bbox(line.polygon)
+    candidates = []
 
+    best_region = None
+    best_intersection = 0.0
     for region in regions:
         intersection = bbox_intersection(line_bbox, region.bbox)
-        if intersection and line.transcription:
-            region.lines.append(line.transcription)
+        if intersection > best_intersection:
+            best_intersection = intersection
+            best_region = region
+
+    if best_region:
+        best_region.lines.append(line.transcription)
 
 
 def add_labels(regions: List[AnnotatedRegion], relations: Dict[str, List[str]]):
@@ -146,7 +153,7 @@ def main(args):
         try:
             pagexml = PageLayout(file=path_xml)
         except OSError:
-            logging.warning(f"XML file {filename_xml} not found. SKIPPING")
+            logging.warning(f"XML file {path_xml} not found. SKIPPING")
             continue
 
         regions, relations = parse_annotated_file(annotated_file)
