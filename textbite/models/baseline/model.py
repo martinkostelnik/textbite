@@ -21,7 +21,7 @@ class BaselineModel(nn.Module):
         self.hidden_size = hidden_size
         self.activation = activation
         self.dropout_prob = dropout_prob
-        self.context = context 
+        self.context = context
 
         self.input_size = 768
         self.output_size = 3
@@ -49,8 +49,6 @@ class BaselineModel(nn.Module):
 
             self.layers.append(nn.Linear(self.hidden_size, self.output_size))
 
-        self.layers.append(nn.Softmax(dim=1))
-
     def forward(self, features):
         # features *= self.context_mask
 
@@ -58,4 +56,3 @@ class BaselineModel(nn.Module):
             features = layer(features)
 
         return features
-
