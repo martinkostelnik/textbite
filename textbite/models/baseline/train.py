@@ -22,14 +22,14 @@ def parse_arguments():
 
     parser.add_argument("--data", required=True, type=str, help="Path to a pickle file with training data.")
 
-    parser.add_argument("-b", type=int, default=64, help="Batch size")
-    parser.add_argument("-r", type=float, default=0.8, help="Train/Validation ratio.")
+    parser.add_argument("-b", "--batch-size", type=int, default=64, help="Batch size")
+    parser.add_argument("-r", "--train-ratio", type=float, default=0.8, help="Train/Validation ratio.")
 
-    parser.add_argument("-l", type=int, default=2, help="Number of layers in the model.")
-    parser.add_argument("-n", type=int, default=256, help="Hidden size of layers.")
-    parser.add_argument("-d", type=float, default=0.1, help="Dropout probability in the model.")
+    parser.add_argument("-l", "--nb-hidden", type=int, default=2, help="Number of layers in the model.")
+    parser.add_argument("-n", "--hidden-width", type=int, default=256, help="Hidden size of layers.")
+    parser.add_argument("-d", "--dropout", type=float, default=0.1, help="Dropout probability in the model.")
 
-    parser.add_argument("-e", type=int, default=50, help="Number of epochs")
+    parser.add_argument("-e", "--max-epochs", type=int, default=50, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
 
     parser.add_argument("--save", type=str, help="Where to save the model")
@@ -66,7 +66,7 @@ def train(
     model.train()
 
     optim = torch.optim.Adam(model.parameters(), lr)
-    criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.16, 0.42, 0.42]).to(device))
+    criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.05, 1.0, 1.0]).to(device))
     # criterion = torch.nn.CrossEntropyLoss()
 
     best_f1_val = 0.0
@@ -79,10 +79,12 @@ def train(
         epoch_preds_val = []
 
         model.train()
+        train_nb_examples = 0
+        train_loss = 0.0
         for step, (embeddings, labels) in enumerate(train_loader):
             embeddings = embeddings.to(device)
             labels = labels.to(device)
-            
+
             optim.zero_grad()
             outputs = model(embeddings)
             loss = criterion(outputs, labels)
@@ -91,10 +93,15 @@ def train(
             loss.backward()
             optim.step()
 
+            train_loss += loss.cpu().item()
+            train_nb_examples += len(labels)
+
             epoch_labels.extend(labels.cpu())
             epoch_preds.extend(preds.cpu())
 
         model.eval()
+        val_nb_examples = 0
+        val_loss = 0.0
         for embeddings, labels in val_loader:
             embeddings = embeddings.to(device)
             labels = labels.to(device)
@@ -103,6 +110,9 @@ def train(
                 outputs = model(embeddings)
             loss = criterion(outputs, labels)
             preds = torch.argmax(outputs, dim=1)
+
+            val_nb_examples += len(labels)
+            val_loss += loss.cpu().item()
 
             epoch_labels_val.extend(labels.cpu())
             epoch_preds_val.extend(preds.cpu())
@@ -114,12 +124,12 @@ def train(
             best_f1_val = f1_val
             print(f"SAVING MODEL at f1_val = {f1_val}")
             torch.save({"state_dict": model.state_dict(),
-                        "n_layers": model.n_layers, 
+                        "n_layers": model.n_layers,
                         "hidden_size": model.hidden_size},
-                        os.path.join(save_path, "BaselineModel.pth"))
+                       os.path.join(save_path, "BaselineModel.pth"))
 
-        print(f"Epoch {epoch + 1} finished | f1 = {f1:.2f} | Predicts zeros: {not any(preds)}")
-        if not (epoch + 1) % 10:
+        print(f"Epoch {epoch + 1} finished | train f1 = {f1:.2f} loss = {train_loss/train_nb_examples:.3e} | val f1 = {f1_val:.2f} loss = {val_loss/val_nb_examples:.3e} {'| Only zeros in last val batch!' if not any(preds) else ''}")
+        if (epoch + 1) % 10 == 0:
             print("TRAIN REPORT:")
             print(classification_report(epoch_labels, epoch_preds, digits=4, zero_division=0, target_names=["None", "Terminating", "Title"]))
             print("VALIDATION REPORT:")
@@ -133,15 +143,15 @@ def main(args):
 
     # Data loaders
     logging.info("Creating data loaders ...")
-    train_loader, val_loader = prepare_loaders(args.data, args.b, args.r)
+    train_loader, val_loader = prepare_loaders(args.data, args.batch_size, args.train_ratio)
     logging.info("Data loaders ready.")
 
     # Model
     logging.info("Creating model ...")
     model = BaselineModel(
-        n_layers=args.l,
-        hidden_size=args.n,
-        dropout_prob=args.d,
+        n_layers=args.nb_hidden,
+        hidden_size=args.hidden_width,
+        dropout_prob=args.dropout,
         device=device,
         context=False,
     )
@@ -155,7 +165,7 @@ def main(args):
         device=device,
         train_loader=train_loader,
         val_loader=val_loader,
-        epochs=args.e,
+        epochs=args.max_epochs,
         lr=args.lr,
         save_path=args.save,
     )
