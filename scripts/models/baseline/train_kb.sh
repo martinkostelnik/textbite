@@ -15,4 +15,5 @@ python -u /mnt/matylda5/ibenes/teh_codez/textbite/textbite/models/baseline/train
     --dropout 0.0 \
     --max-epochs 500 \
     --lr 1e-3 \
-    --save /mnt/matylda5/ibenes/projects/textbite
+    --save /mnt/matylda5/ibenes/projects/textbite \
+    --checkpoint-dir /mnt/matylda5/ibenes/projects/textbite/checkpoints

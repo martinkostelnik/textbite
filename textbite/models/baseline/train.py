@@ -32,7 +32,8 @@ def parse_arguments():
     parser.add_argument("-e", "--max-epochs", type=int, default=50, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
 
-    parser.add_argument("--save", type=str, help="Where to save the model")
+    parser.add_argument("--save", type=str, help="Where to save the model best by validation F1")
+    parser.add_argument("--checkpoint-dir", type=str, help="Where to put all training checkpoints")
 
     args = parser.parse_args()
     return args
@@ -62,6 +63,7 @@ def train(
         epochs: int,
         lr: float,
         save_path: str,
+        checkpoint_dir: str,
     ):
     model.train()
 
@@ -120,13 +122,15 @@ def train(
         f1 = f1_score(epoch_labels, epoch_preds, average="macro")
         f1_val = f1_score(epoch_labels_val, epoch_preds_val, average="macro")
 
+        dict_for_saving = {
+            "state_dict": model.state_dict(),
+            "n_layers": model.n_layers,
+            "hidden_size": model.hidden_size
+        }
         if f1_val > best_f1_val:
             best_f1_val = f1_val
             print(f"SAVING MODEL at f1_val = {f1_val}")
-            torch.save({"state_dict": model.state_dict(),
-                        "n_layers": model.n_layers,
-                        "hidden_size": model.hidden_size},
-                       os.path.join(save_path, "BaselineModel.pth"))
+            torch.save(dict_for_saving, os.path.join(save_path, "BaselineModel.pth"))
 
         print(f"Epoch {epoch + 1} finished | train f1 = {f1:.2f} loss = {train_loss/train_nb_examples:.3e} | val f1 = {f1_val:.2f} loss = {val_loss/val_nb_examples:.3e} {'| Only zeros in last val batch!' if not any(preds) else ''}")
         if (epoch + 1) % 10 == 0:
@@ -134,9 +138,14 @@ def train(
             print(classification_report(epoch_labels, epoch_preds, digits=4, zero_division=0, target_names=["None", "Terminating", "Title"]))
             print("VALIDATION REPORT:")
             print(classification_report(epoch_labels_val, epoch_preds_val, digits=4, zero_division=0, target_names=["None", "Terminating", "Title"]))
+            if checkpoint_dir:
+                torch.save(dict_for_saving, os.path.join(checkpoint_dir, f'checkpoint.{epoch}.pth'))
 
 
 def main(args):
+    if args.checkpoint_dir:
+        os.makedirs(args.checkpoint_dir, exist_ok=True)
+
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Training on: {device}")
@@ -168,6 +177,7 @@ def main(args):
         epochs=args.max_epochs,
         lr=args.lr,
         save_path=args.save,
+        checkpoint_dir=args.checkpoint_dir,
     )
     end = perf_counter()
     t = end - start
