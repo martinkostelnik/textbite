@@ -31,44 +31,43 @@ def parse_arguments():
 
 
 def get_embedding(
-    text: str,
-    right_context: str,
-    tokenizer: BertTokenizerFast,
-    czert: BertModel,
-    device,
-    ) -> FloatTensor:
-        tokenizer_output = tokenizer(
-            text,
-            right_context,
-            max_length=256,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
+        text: str,
+        right_context: str,
+        tokenizer: BertTokenizerFast,
+        czert: BertModel,
+        device,
+) -> FloatTensor:
+    tokenizer_output = tokenizer(
+        text,
+        right_context,
+        max_length=256,
+        padding="max_length",
+        truncation=True,
+        return_tensors="pt",
+    )
+
+    input_ids = tokenizer_output["input_ids"].to(device)
+    token_type_ids = tokenizer_output["token_type_ids"].to(device)
+    attention_mask = tokenizer_output["attention_mask"].to(device)
+
+    with torch.no_grad():
+        czert_outputs = czert(
+            input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
         )
-        
-        input_ids = tokenizer_output["input_ids"].to(device)
-        token_type_ids = tokenizer_output["token_type_ids"].to(device)
-        attention_mask = tokenizer_output["attention_mask"].to(device)
 
-        with torch.no_grad():
-            czert_outputs = czert(
-                input_ids,
-                token_type_ids=token_type_ids,
-                attention_mask=attention_mask,
-            )
-
-        return czert_outputs.pooler_output
+    return czert_outputs.pooler_output
 
 
 def infer(
-    data: List[str],
-    model_path: str,
-    )-> List[List[str]]:
+        data: List[str],
+        model_path: str,
+) -> List[List[str]]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
-    czert = BertModel.from_pretrained(CZERT_PATH)
-    czert = czert.to(device)
+    czert = BertModel.from_pretrained(CZERT_PATH, device=device)
 
     model_checkpoint = torch.load(model_path)
     model = BaselineModel(
@@ -108,14 +107,14 @@ def infer(
 def infer_pagexml(
     data_path: str,
     model_path: str,
-    ) -> Dict[str, List[List[str]]]:
+) -> Dict[str, List[List[str]]]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
     czert = BertModel.from_pretrained(CZERT_PATH)
     czert = czert.to(device)
 
-    model_checkpoint = torch.load(model_path)
+    model_checkpoint = torch.load(model_path, map_location=device)
     model = BaselineModel(
         device=device,
         n_layers=model_checkpoint["n_layers"],
@@ -136,6 +135,10 @@ def infer_pagexml(
         result = []
         bite = []
         for i, line in enumerate(lines):
+            if line.transcription is None:
+                logging.warning(f'Line {line.id} has no transcription')
+                continue
+
             text = line.transcription.strip()
             try:
                 right_context = lines[i + 1].transcription.strip()
@@ -157,10 +160,10 @@ def infer_pagexml(
             result.append(bite)
 
         results[filename] = result
-    
+
     return results
 
-            
+
 def main(args):
     # with open(args.data) as f:
     #     lines = f.readlines()
