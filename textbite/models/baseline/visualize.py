@@ -41,6 +41,7 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--pages", required=True, type=str, help="Path to a folder with xml and jpg data.")
     parser.add_argument("--jsons", required=True, type=str, help="Path to a folder with json data.")
     parser.add_argument("--out-dir", required=True, type=str, help="Folder where to put the outputs")
@@ -66,7 +67,7 @@ def draw_bites(img, pagexml, bites):
 
 def main():
     args = parse_arguments()
-    logging.basicConfig(level=logging.INFO, force=True)
+    logging.basicConfig(level=args.logging_level, force=True)
 
     os.makedirs(args.out_dir, exist_ok=True)
 

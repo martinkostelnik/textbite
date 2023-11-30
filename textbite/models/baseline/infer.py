@@ -23,6 +23,7 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--data", required=True, type=str, help="Path to a folder with data, either xml or txt.")
     parser.add_argument("--out-dir", required=True, type=str, help="Folder where to put output jsons.")
     parser.add_argument("--model", required=True, type=str, help="Path to the baseline model.")
@@ -120,7 +121,7 @@ def infer_pagexml(
 
 def main():
     args = parse_arguments()
-    logging.basicConfig(level=logging.DEBUG, force=True)
+    logging.basicConfig(level=args.logging_level, force=True)
     safe_gpu.claim_gpus()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -134,7 +135,7 @@ def main():
             continue
 
         path = os.path.join(args.data, filename)
-        logging.debug(f"Processing: {path}")
+        logging.info(f"Processing: {path}")
         pagexml = PageLayout(file=path)
 
         result = infer_pagexml(pagexml, embedding_provider, line_classifier)
