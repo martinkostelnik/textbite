@@ -24,6 +24,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--data", required=True, type=str, help="Path to a folder with data, either xml or txt.")
+    parser.add_argument("--out-dir", required=True, type=str, help="Folder where to put output jsons.")
     parser.add_argument("--model", required=True, type=str, help="Path to the baseline model.")
 
     args = parser.parse_args()
@@ -75,7 +76,7 @@ class LineClassifier:
             hidden_size=model_checkpoint["hidden_size"]
         )
         self.model.to(device)
-        self.device = device
+        self.model.eval()
 
     def classify_line(self, features):
         with torch.no_grad():
@@ -117,11 +118,16 @@ def infer_pagexml(
     return result
 
 
-def main(args):
+def main():
+    args = parse_arguments()
+    logging.basicConfig(level=logging.DEBUG, force=True)
+    safe_gpu.claim_gpus()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     embedding_provider = EmbeddingProvider(CZERT_PATH, device)
     line_classifier = LineClassifier(args.model, device)
+
+    os.makedirs(args.out_dir, exist_ok=True)
 
     for filename in os.listdir(args.data):
         if not filename.endswith(".xml"):
@@ -133,16 +139,10 @@ def main(args):
 
         result = infer_pagexml(pagexml, embedding_provider, line_classifier)
 
-        out_path = os.path.join(args.data, filename.replace(".xml", ".json"))
+        out_path = os.path.join(args.out_dir, filename.replace(".xml", ".json"))
         with open(out_path, "w") as f:
             json.dump(result, f, indent=4)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG,
-        force=True,
-    )
-    args = parse_arguments()
-    safe_gpu.claim_gpus()
-    main(args)
+    main()

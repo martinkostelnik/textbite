@@ -41,51 +41,55 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--data", required=True, type=str, help="Path to a folder with json, xml and jpg data.")
+    parser.add_argument("--pages", required=True, type=str, help="Path to a folder with xml and jpg data.")
+    parser.add_argument("--jsons", required=True, type=str, help="Path to a folder with json data.")
+    parser.add_argument("--out-dir", required=True, type=str, help="Folder where to put the outputs")
 
     args = parser.parse_args()
     return args
 
 
-def draw_bites(img):
-    pass
+def draw_bites(img, pagexml, bites):
+    overlay = np.zeros_like(img)
+
+    rev_bites_dict = {line_id: bite_id for bite_id, bite in enumerate(bites) for line_id in bite}
+
+    for line in pagexml.lines_iterator():
+        mask = np.zeros_like(img)
+        pts = line.polygon
+        pts = pts.reshape((-1, 1, 2))
+        cv2.fillPoly(mask, [pts], colors[rev_bites_dict[line.id] % len(colors)])
+        overlay = cv2.addWeighted(overlay, 1, mask, 1-ALPHA, 0)
+
+    return cv2.addWeighted(img, 1, overlay, 1-ALPHA, 0)
 
 
-def main(args):
-    image_files = [image_file for image_file in os.listdir(args.data) if image_file.endswith(".jpg")]
+def main():
+    args = parse_arguments()
+    logging.basicConfig(level=logging.INFO, force=True)
+
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    image_files = [image_file for image_file in os.listdir(args.pages) if image_file.endswith(".jpg")]
     for img_filename in image_files:
-        pagexml_path = os.path.join(args.data, img_filename.replace(".jpg", ".xml"))
+
+        pagexml_path = os.path.join(args.pages, img_filename.replace(".jpg", ".xml"))
         pagexml = PageLayout(file=pagexml_path)
 
-        regions_path = os.path.join(args.data, img_filename.replace(".jpg", ".json"))
+        regions_path = os.path.join(args.jsons, img_filename.replace(".jpg", ".json"))
         with open(regions_path, "r") as f:
             bites = json.load(f)
 
-        img_path = os.path.join(args.data, img_filename)
+        img_path = os.path.join(args.pages, img_filename)
         img = cv2.imread(img_path)
 
-        overlay = np.zeros_like(img)
+        result = draw_bites(img, pagexml, bites)
 
-        for i, bite in enumerate(bites):
-            for line_id in bite:
-                for line in pagexml.lines_iterator():
-                    if line.id.strip() == line_id:
-                        mask = np.zeros_like(img)
-                        pts = line.polygon
-                        pts = pts.reshape((-1, 1, 2))
-                        cv2.fillPoly(mask, [pts], colors[i])
-                        overlay = cv2.addWeighted(overlay, 1, mask, 1-ALPHA, 0)
-                        break
-
-        result = cv2.addWeighted(img, 1, overlay, 1-ALPHA, 0)
-        res_filename = os.path.join(args.data, img_filename.replace(".jpg", "-vis.jpg"))
+        res_filename = os.path.join(args.out_dir, img_filename.replace(".jpg", "-vis.jpg"))
         cv2.imwrite(res_filename, result)
 
+        logging.info(f'Processed {res_filename}')
 
-if __name__ == "__main__":  
-    logging.basicConfig(
-        level=logging.DEBUG,
-        force=True,
-    )
-    args = parse_arguments()
-    main(args)
+
+if __name__ == "__main__":
+    main()
