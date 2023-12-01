@@ -50,7 +50,7 @@ def main():
             ground_truth = json.load(f)
 
         score = score_page(hypothesis, ground_truth)
-        print(score)
+        print(format_v_scores(score))
 
     else:
         nb_not_found = 0
