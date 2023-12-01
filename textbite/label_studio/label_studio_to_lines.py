@@ -4,7 +4,7 @@ import argparse
 import json
 import urllib.parse
 import logging
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 from collections import namedtuple
 from dataclasses import dataclass, field
 
@@ -24,6 +24,7 @@ class AnnotatedRegion:
     label: str
     bbox: Rectangle
     lines: List[str] = field(default_factory=list)
+    line_ids: List[str] = field(default_factory=list)
 
 
 def parse_arguments():
@@ -33,6 +34,7 @@ def parse_arguments():
 
     parser.add_argument("--json", required=True, type=str, help="Path to an exported JSON file from label-studio.")
     parser.add_argument('--xml', required=True, type=str, help="Path to a folder containing XML files from PERO-OCR.")
+    parser.add_argument("--gt-jsons-dir", type=str, help="Folder to store JSON formated as system outputs into")
 
     args = parser.parse_args()
     return args
@@ -55,8 +57,38 @@ def parse_annotated_file(annotated_file: dict) -> Tuple[List[AnnotatedRegion], D
     # Regions
     regions = [a for a in annotations if a["type"] == "rectanglelabels"]
     regions = [parse_annotated_region(region) for region in regions]
-    
+
     return regions, relations
+
+
+def merge_regions(regions, relations):
+    translations = {r.id: r.id for r in regions}
+    regions_dict = {r.id: r for r in regions}
+
+    for src, dst in relations.items():
+        if len(dst) > 0:
+            logging.warning(f'There are multiple outgoing relations for {src}')
+
+        dst = dst[0]
+        if src in translations and dst in translations:
+            true_src = translations[src]
+            true_dst = translations[dst]
+
+            regions_dict[true_src].lines.extend(regions_dict[true_dst].lines)
+            regions_dict[true_src].line_ids.extend(regions_dict[true_dst].line_ids)
+
+            translations[true_dst] = true_src
+
+            del regions_dict[true_dst]
+        else:
+            if src in translations:
+                translations[dst] = translations[src]
+            elif dst in translations:
+                translations[src] = translations[dst]
+            else:
+                logging.warning(f'Relation between two nonexistent regions!')
+
+    return list(regions_dict.values())
 
 
 def parse_annotated_region(region: dict) -> AnnotatedRegion:
@@ -100,10 +132,10 @@ def bbox_intersection(lhs: Rectangle, rhs: Rectangle) -> float:
 def create_mapping(
         regions: List[AnnotatedRegion],
         pagexml: PageLayout,
-    ) -> None:
-        for line in pagexml.lines_iterator():
-            if line.transcription:
-                map_line(line, regions)
+) -> None:
+    for line in pagexml.lines_iterator():
+        if line.transcription:
+            map_line(line, regions)
 
 
 def map_line(line: TextLine, regions: List[AnnotatedRegion]) -> None:
@@ -120,6 +152,7 @@ def map_line(line: TextLine, regions: List[AnnotatedRegion]) -> None:
 
     if best_region:
         best_region.lines.append(line.transcription)
+        best_region.line_ids.append(line.id)
 
 
 def add_labels(regions: List[AnnotatedRegion], relations: Dict[str, List[str]]):
@@ -127,7 +160,7 @@ def add_labels(regions: List[AnnotatedRegion], relations: Dict[str, List[str]]):
         if region.label == "title":
             for line in region.lines:
                 print(f"{line}\t{LineLabel.TITLE.value}")
-        
+
         elif region.label == "text":
             for line in region.lines[:-1]:
                 print(f"{line}\t{LineLabel.NONE.value}")
@@ -140,9 +173,13 @@ def add_labels(regions: List[AnnotatedRegion], relations: Dict[str, List[str]]):
         print()
 
 
-def main(args):
-    with open (args.json, "r") as f:
+def main():
+    args = parse_arguments()
+    with open(args.json, "r") as f:
         annotations_file_json = json.load(f)
+
+    if args.gt_jsons_dir:
+        os.makedirs(args.gt_jsons_dir, exist_ok=True)
 
     for annotated_file in annotations_file_json:
         filename = os.path.basename(annotated_file["data"]["image"])[:-4]
@@ -161,7 +198,14 @@ def main(args):
         regions = [region for region in regions if region.lines]
         add_labels(regions, relations)
 
+        regions = merge_regions(regions, relations)
+
+        if args.gt_jsons_dir:
+            repre = [[id for id in r.line_ids] for r in regions]
+            gt_json_path = os.path.join(args.gt_jsons_dir, f'{filename}.json')
+            with open(gt_json_path, 'w') as f:
+                json.dump(repre, f, indent=4)
+
 
 if __name__ == "__main__":
-    args = parse_arguments()
-    main(args)
+    main()
