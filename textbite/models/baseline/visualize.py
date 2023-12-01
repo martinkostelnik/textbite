@@ -56,6 +56,10 @@ def draw_bites(img, pagexml, bites):
     rev_bites_dict = {line_id: bite_id for bite_id, bite in enumerate(bites) for line_id in bite}
 
     for line in pagexml.lines_iterator():
+        if line.id not in rev_bites_dict:
+            logging.warning(f'Failed to overlay {line.id} in {pagexml.id}')
+            continue
+
         mask = np.zeros_like(img)
         pts = line.polygon
         pts = pts.reshape((-1, 1, 2))
@@ -72,8 +76,8 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     image_files = [image_file for image_file in os.listdir(args.pages) if image_file.endswith(".jpg")]
-    for img_filename in image_files:
 
+    for img_filename in image_files:
         pagexml_path = os.path.join(args.pages, img_filename.replace(".jpg", ".xml"))
         pagexml = PageLayout(file=pagexml_path)
 
