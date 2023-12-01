@@ -9,6 +9,8 @@ import numpy as np
 
 from pero_ocr.document_ocr.layout import PageLayout
 
+from textbite.annotation_manipulation import get_line_clusters
+
 
 ALPHA = 0.3
 colors = [
@@ -53,7 +55,7 @@ def parse_arguments():
 def draw_bites(img, pagexml, bites):
     overlay = np.zeros_like(img)
 
-    rev_bites_dict = {line_id: bite_id for bite_id, bite in enumerate(bites) for line_id in bite}
+    rev_bites_dict = get_line_clusters(bites)
 
     for line in pagexml.lines_iterator():
         if line.id not in rev_bites_dict:
