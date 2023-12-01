@@ -14,6 +14,9 @@ from textbite.models.baseline.utils import Sample
 from textbite.utils import LineLabel
 from textbite.utils import CZERT_PATH
 
+from semant.language_modelling.model import build_model
+from semant.language_modelling.tokenizer import build_tokenizer
+
 
 def parse_arguments():
     print(' '.join(sys.argv), file=sys.stderr)
@@ -21,6 +24,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-i", required=True, type=str, help="Path to a mapping file.")
+    parser.add_argument("--model", type=str, help="Path to a custom BERT model.")
 
     args = parser.parse_args()
     return args
@@ -28,28 +32,28 @@ def parse_arguments():
 
 def get_embedding(
         text: str,
-        czert: BertModel,
+        bert: BertModel,
         tokenizer: BertTokenizerFast,
         device,
         max_len: int = 256,
         left_context: Optional[str] = None,
         right_context: Optional[str] = None,
     ) -> FloatTensor:
-    tokenizer_output = tokenizer(
-        left_context,
-        text,
-        right_context,
-        max_length=max_len,
-        padding="max_length",
-        truncation=True,
-        return_tensors="pt",
-    )
+    # tokenizer_output = tokenizer(
+    #     text,
+    #     right_context,
+    #     max_length=max_len,
+    #     padding="max_length",
+    #     truncation=True,
+    #     return_tensors="pt",
+    # )
+    tokenizer_output = tokenizer(text, right_context)
 
     input_ids = tokenizer_output["input_ids"].to(device)
     token_type_ids=tokenizer_output["token_type_ids"].to(device)
     attention_mask=tokenizer_output["attention_mask"].to(device)
 
-    outputs = czert(
+    outputs = bert(
         input_ids,
         token_type_ids=token_type_ids,
         attention_mask=attention_mask,
@@ -64,36 +68,57 @@ def main(args):
         lines = f.readlines()
     lines = [line for line in lines if line and line != "\n"]
 
-    tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
-    czert = BertModel.from_pretrained(CZERT_PATH)
-    print(czert)
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # czert = czert.to(device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # samples = []
-    # for i, line in tqdm(enumerate(lines)):
-    #     line = line.strip()
-    #     if not line:
-    #         continue
+    if args.model:
+        checkpoint = torch.load(args.model)
+        tokenizer = build_tokenizer(
+            seq_len=checkpoint["seq_len"],
+            fixed_sep=checkpoint["fixed_sep"],
+            masking_prob=0.0,
+        )
 
-    #     try:
-    #         right_context, _ = lines[i + 1].split("\t")
-    #     except IndexError:
-    #         right_context = ""
+        bert = build_model(
+            czert=checkpoint["czert"],
+            vocab_size=len(tokenizer),
+            device=device,
+            seq_len=checkpoint["seq_len"],
+            out_features=checkpoint["features"],
+            mlm_level=0,
+            sep=checkpoint["sep"],
+        )
+        bert.bert.load_state_dict(checkpoint["bert_state_dict"])
+        bert.nsp_head.load_state_dict(checkpoint["nsp_head_state_dict"])
+    else:
+        tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
+        bert = BertModel.from_pretrained(CZERT_PATH)
 
-    #     try:
-    #         left_context, _ = lines[i - 1].split("\t")
-    #     except IndexError:
-    #         left_context = ""
+    bert = bert.to(device)
 
-    #     text, label = line.split("\t")
+    samples = []
+    for i, line in tqdm(enumerate(lines)):
+        line = line.strip()
+        if not line:
+            continue
 
-    #     embedding = get_embedding(text, czert, tokenizer, device, left_context=left_context, right_context=right_context)
-    #     sample = Sample(embedding, LineLabel(int(label)))
-    #     samples.append(sample)
+        try:
+            right_context, _ = lines[i + 1].split("\t")
+        except IndexError:
+            right_context = ""
 
-    # with open("novy-lrcontext.pkl", "wb") as f:
-    #     pickle.dump(samples, f)
+        try:
+            left_context, _ = lines[i - 1].split("\t")
+        except IndexError:
+            left_context = ""
+
+        text, label = line.split("\t")
+
+        embedding = get_embedding(text, bert, tokenizer, device, right_context=right_context)
+        sample = Sample(embedding, LineLabel(int(label)))
+        samples.append(sample)
+
+    with open("data-516.pkl", "wb") as f:
+        pickle.dump(samples, f)
 
 
 if __name__ == "__main__":
