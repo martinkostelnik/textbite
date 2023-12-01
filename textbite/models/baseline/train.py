@@ -68,7 +68,7 @@ def train(
     model.train()
 
     optim = torch.optim.Adam(model.parameters(), lr)
-    criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.05, 1.0, 1.0]).to(device))
+    criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.1, 0.4, 0.4]).to(device))
     # criterion = torch.nn.CrossEntropyLoss()
 
     best_f1_val = 0.0
@@ -162,7 +162,6 @@ def main(args):
         hidden_size=args.hidden_width,
         dropout_prob=args.dropout,
         device=device,
-        context=False,
     )
     model = model.to(device)
     logging.info("Model created.")
