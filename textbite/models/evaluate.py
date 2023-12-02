@@ -3,13 +3,15 @@ import argparse
 import json
 import logging
 import os
+import sys
 
 import sklearn.metrics
 
-from textbite.annotation_manipulation import get_line_clusters
+from textbite.utils import get_line_clusters
 
 
-def get_args():
+def parse_arguments():
+    print(' '.join(sys.argv), file=sys.stderr)
     parser = argparse.ArgumentParser()
     parser.add_argument('--logging-level', default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument('--single-page', action='store_true',
@@ -39,7 +41,7 @@ def format_v_scores(scores):
 
 
 def main():
-    args = get_args()
+    args = parse_arguments()
     logging.basicConfig(level=args.logging_level, force=True)
 
     if args.single_page:

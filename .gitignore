@@ -10,3 +10,5 @@ textbite/existing_methods/stopwords/
 /models/
 test-data/
 /visualization
+/visualizations
+/jsons

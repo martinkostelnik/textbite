@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from collections import namedtuple
 from math import sqrt
 
@@ -20,6 +20,14 @@ def dist_l2(p1: Point, p2: Point) -> float:
     return sqrt(dx*dx + dy*dy)
 
 
+def polygon_to_bbox(polygon: np.ndarray) -> AABB:
+        mins = np.min(polygon, axis=0)
+        maxs = np.max(polygon, axis=0)
+
+        # (minx, miny, maxx, maxy)
+        return AABB(mins[0], mins[1], maxs[0], maxs[1])
+
+
 def bbox_intersection(lhs: AABB, rhs: AABB) -> float:
     dx = min(lhs.xmax, rhs.xmax) - max(lhs.xmin, rhs.xmin)
     dy = min(lhs.ymax, rhs.ymax) - max(lhs.ymin, rhs.ymin)
@@ -30,6 +38,16 @@ def bbox_intersection(lhs: AABB, rhs: AABB) -> float:
 def bbox_intersection_x(lhs: AABB, rhs: AABB) -> float:
     dx = min(lhs.xmax, rhs.xmax) - max(lhs.xmin, rhs.xmin)
     return max(dx, 0.0)
+
+
+def bbox_to_yolo(bbox: AABB, page_width, page_height) -> Tuple[float, float, float, float]:
+    dx, dy = bbox.xmax - bbox.xmin, bbox.ymax - bbox.ymin
+    x = (bbox.xmin + (dx / 2.0)) / page_width
+    y = (bbox.ymin + (dy / 2.0)) / page_height
+    width = dx / page_width
+    height = dy / page_height
+
+    return x, y, width, height
 
 
 class LineGeometry:
@@ -83,11 +101,7 @@ class LineGeometry:
         return neighbourhood
 
     def get_bbox(self) -> AABB:
-        mins = np.min(self.text_line.polygon, axis=0)
-        maxs = np.max(self.text_line.polygon, axis=0)
-
-        # (minx, miny, maxx, maxy)
-        return AABB(mins[0], mins[1], maxs[0], maxs[1])
+        return polygon_to_bbox(self.text_line.polygon)
     
     def get_width(self) -> float:
         return self.bbox.xmax - self.bbox.xmin

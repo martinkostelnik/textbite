@@ -1,3 +1,11 @@
+"""Visualize hand annotated bites in YOLO format.
+   Will visualize titles in WHITE.
+   Will visualize regions as: first line RED, whole region GREEN, last line BLUE.
+
+    Date -- 02.12.2023
+    Author -- Martin Kostelnik
+"""
+
 import sys
 import argparse
 import os
@@ -53,7 +61,10 @@ def draw_bboxes(image, lines):
     return image
 
 
-def main(args):
+def main():
+    args = parse_arguments()
+    logging.basicConfig(level=args.logging_level,force=True)
+
     yolo_files = [filename for filename in os.listdir(args.yolo) if filename.endswith(".yolo")]
     
     for yolo_file in yolo_files:
@@ -77,10 +88,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_arguments()
-    logging.basicConfig(
-        level=logging.DEBUG,
-        force=True,
-        format="%(message)s",
-    )
-    main(args)
+    main()
