@@ -40,7 +40,8 @@ class LineClassifier:
             n_layers=model_checkpoint["n_layers"],
             hidden_size=model_checkpoint["hidden_size"]
         )
-        self.model.to(device)
+        self.model.load_state_dict(model_checkpoint["state_dict"])
+        self.model = self.model.to(device)
         self.model.eval()
         self.device = device
 

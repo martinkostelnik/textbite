@@ -33,9 +33,8 @@ def parse_arguments():
 class EmbeddingProvider:
     def __init__(self, device, bert_path: str=CZERT_PATH):
         self.tokenizer, self.bert = create_language_model(device, bert_path)
-        self.bert.to(device)
+        self.bert = self.bert.to(device)
         self.bert.eval()
-
         self.device = device
 
     def get_embedding(
@@ -54,14 +53,15 @@ class EmbeddingProvider:
         )
 
         input_ids = tokenizer_output["input_ids"].to(self.device)
-        token_type_ids=tokenizer_output["token_type_ids"].to(self.device)
-        attention_mask=tokenizer_output["attention_mask"].to(self.device)
+        token_type_ids = tokenizer_output["token_type_ids"].to(self.device)
+        attention_mask = tokenizer_output["attention_mask"].to(self.device)
 
-        outputs = self.bert(
-            input_ids,
-            token_type_ids=token_type_ids,
-            attention_mask=attention_mask,
-        )
+        with torch.no_grad():
+            outputs = self.bert(
+                input_ids,
+                token_type_ids=token_type_ids,
+                attention_mask=attention_mask,
+            )
         bert_embedding = outputs.pooler_output.detach().flatten().cpu()
         geometry_embedding = line_geometry.get_features(return_type="pt")
 
