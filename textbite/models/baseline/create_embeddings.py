@@ -2,7 +2,8 @@ import argparse
 import sys
 import pickle
 from typing import Optional
-from tqdm import tqdm
+import logging
+import os
 
 import torch
 from torch import FloatTensor
@@ -11,6 +12,7 @@ from transformers import BertModel, BertTokenizerFast
 from safe_gpu import safe_gpu
 
 from textbite.models.baseline.utils import Sample
+from textbite.geometry import PageGeometry, LineGeometry
 from textbite.utils import LineLabel
 from textbite.utils import CZERT_PATH
 
@@ -23,31 +25,33 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-i", required=True, type=str, help="Path to a mapping file.")
+    parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
+    parser.add_argument("--xml", required=True, type=str, help="Path to a folder with xmls.")
+    parser.add_argument("--mapping", required=True, type=str, help="Path to a mapping file.")
     parser.add_argument("--model", type=str, help="Path to a custom BERT model.")
+    parser.add_argument("--save", default=".", type=str, help="Where to save the result pickle file.")
 
     args = parser.parse_args()
     return args
 
 
 def get_embedding(
-        text: str,
+        line_geometry: LineGeometry,
         bert: BertModel,
         tokenizer: BertTokenizerFast,
         device,
+        right_context: str,
         max_len: int = 256,
-        left_context: Optional[str] = None,
-        right_context: Optional[str] = None,
     ) -> FloatTensor:
-    # tokenizer_output = tokenizer(
-    #     text,
-    #     right_context,
-    #     max_length=max_len,
-    #     padding="max_length",
-    #     truncation=True,
-    #     return_tensors="pt",
-    # )
-    tokenizer_output = tokenizer(text, right_context)
+    tokenizer_output = tokenizer(
+        line_geometry.text_line.transcription.strip(),
+        right_context,
+        max_length=max_len,
+        padding="max_length",
+        truncation=True,
+        return_tensors="pt",
+    )
+    # tokenizer_output = tokenizer(line_geometry.text_line.transcription.strip(), right_context)1
 
     input_ids = tokenizer_output["input_ids"].to(device)
     token_type_ids=tokenizer_output["token_type_ids"].to(device)
@@ -58,15 +62,18 @@ def get_embedding(
         token_type_ids=token_type_ids,
         attention_mask=attention_mask,
     )
-    outputs = outputs.pooler_output.detach().flatten().cpu()
+    bert_embedding = outputs.pooler_output.detach().flatten().cpu()
+    geometry_embedding = line_geometry.get_features(return_type="pt")
+
+    outputs = torch.cat([bert_embedding, geometry_embedding])
 
     return outputs
 
 
-def main(args):
-    with open(args.i, "r") as f:
-        lines = f.readlines()
-    lines = [line for line in lines if line and line != "\n"]
+def main():
+    args = parse_arguments()
+    safe_gpu.claim_gpus()
+    logging.basicConfig(level=args.logging_level, force=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -95,33 +102,38 @@ def main(args):
 
     bert = bert.to(device)
 
+    with open(args.mapping, "r") as f:
+        lines = f.readlines()
+    lines = [line.strip() for line in lines if line.strip()]
+    lines_dict = {}
+
+    for mapping_line in lines:
+        line_id, label = mapping_line.split("\t")
+        line_id = line_id.strip()
+        label = LineLabel(int(label.strip()))
+        lines_dict[line_id] = label
+
     samples = []
-    for i, line in tqdm(enumerate(lines)):
-        line = line.strip()
-        if not line:
-            continue
+    xml_filenames = [xml_filename for xml_filename in os.listdir(args.xml) if xml_filename.endswith(".xml")]
+    for xml_filename in xml_filenames:
+        xml_path = os.path.join(args.xml, xml_filename)
+        geometry = PageGeometry(xml_path)
 
-        try:
-            right_context, _ = lines[i + 1].split("\t")
-        except IndexError:
-            right_context = ""
+        for line in geometry.lines:
+            try:
+                label = lines_dict[line.text_line.id]
+            except KeyError:
+                continue
+            right_context = line.child.text_line.transcription.strip() if line.child else ""
 
-        try:
-            left_context, _ = lines[i - 1].split("\t")
-        except IndexError:
-            left_context = ""
+            embedding = get_embedding(line, bert, tokenizer, device, right_context=right_context)
+            sample = Sample(embedding, label)
+            samples.append(sample)
 
-        text, label = line.split("\t")
-
-        embedding = get_embedding(text, bert, tokenizer, device, right_context=right_context)
-        sample = Sample(embedding, LineLabel(int(label)))
-        samples.append(sample)
-
-    with open("data-516.pkl", "wb") as f:
+    save_path = os.path.join(args.save, "data-combined-lm72.pkl")
+    with open(save_path, "wb") as f:
         pickle.dump(samples, f)
 
 
 if __name__ == "__main__":
-    safe_gpu.claim_gpus()
-    args = parse_arguments()
-    main(args)
+    main()
