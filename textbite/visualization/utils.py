@@ -1,3 +1,7 @@
+import cv2
+import numpy as np
+
+
 COLORS = [
     (255, 0, 0),      # Red
     (0, 255, 0),      # Green
@@ -21,3 +25,11 @@ COLORS = [
     (0, 128, 128),    # Teal
     (240, 230, 140)   # Khaki
 ]
+
+
+def overlay_line(img, line, color, alpha):
+    mask = np.zeros_like(img)
+    pts = line.polygon
+    pts = pts.reshape((-1, 1, 2))
+    cv2.fillPoly(mask, [pts], color)
+    return cv2.addWeighted(img, 1, mask, 1-alpha, 0)

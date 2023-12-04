@@ -18,7 +18,7 @@ import numpy as np
 
 from pero_ocr.document_ocr.layout import PageLayout
 
-from textbite.visualization.utils import COLORS
+from textbite.visualization.utils import COLORS, overlay_line
 from textbite.utils import get_line_clusters
 
 
@@ -38,14 +38,6 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
-
-
-def overlay_line(img, line, color, alpha):
-    mask = np.zeros_like(img)
-    pts = line.polygon
-    pts = pts.reshape((-1, 1, 2))
-    cv2.fillPoly(mask, [pts], color)
-    return cv2.addWeighted(img, 1, mask, 1-alpha, 0)
 
 
 def draw_bites(img: MatLike, pagexml: PageLayout, bites: List[List[str]]) -> MatLike:
@@ -81,6 +73,8 @@ def main():
 
         path_img = os.path.join(args.images, json_filename.replace(".json", ".jpg"))
         img = cv2.imread(path_img)
+        if img is None:
+            continue
 
         result = draw_bites(img, pagexml, bites)
 
