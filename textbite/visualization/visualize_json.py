@@ -40,6 +40,14 @@ def parse_arguments():
     return args
 
 
+def overlay_line(img, line, color, alpha):
+    mask = np.zeros_like(img)
+    pts = line.polygon
+    pts = pts.reshape((-1, 1, 2))
+    cv2.fillPoly(mask, [pts], color)
+    return cv2.addWeighted(img, 1, mask, 1-alpha, 0)
+
+
 def draw_bites(img: MatLike, pagexml: PageLayout, bites: List[List[str]]) -> MatLike:
     overlay = np.zeros_like(img)
 
@@ -50,11 +58,7 @@ def draw_bites(img: MatLike, pagexml: PageLayout, bites: List[List[str]]) -> Mat
             logging.warning(f'Line {line.id} not in any bite of {pagexml.id}')
             continue
 
-        mask = np.zeros_like(img)
-        pts = line.polygon
-        pts = pts.reshape((-1, 1, 2))
-        cv2.fillPoly(mask, [pts], COLORS[rev_bites_dict[line.id] % len(COLORS)])
-        overlay = cv2.addWeighted(overlay, 1, mask, 1-ALPHA, 0)
+        overlay = overlay_line(overlay, line, COLORS[rev_bites_dict[line.id] % len(COLORS)], ALPHA)
 
     return cv2.addWeighted(img, 1, overlay, 1-ALPHA, 0)
 
