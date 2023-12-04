@@ -6,16 +6,15 @@ import json
 from typing import List
 
 import torch
-from torch import FloatTensor
 
 from safe_gpu import safe_gpu
-
-from transformers import BertModel, BertTokenizerFast
 
 from pero_ocr.document_ocr.layout import PageLayout
 
 from textbite.utils import CZERT_PATH, LineLabel
 from textbite.models.baseline.model import BaselineModel
+from textbite.models.baseline.embedding import EmbeddingProvider
+from textbite.geometry import PageGeometry
 
 
 def parse_arguments():
@@ -24,52 +23,17 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
-    parser.add_argument("--data", required=True, type=str, help="Path to a folder with data, either xml or txt.")
-    parser.add_argument("--out-dir", required=True, type=str, help="Folder where to put output jsons.")
+    parser.add_argument("--data", required=True, type=str, help="Path to a folder with xml data.")
+    parser.add_argument("--lm", default=CZERT_PATH, type=str, help="Path to language model used for text embedding.")
     parser.add_argument("--model", required=True, type=str, help="Path to the baseline model.")
+    parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
 
     args = parser.parse_args()
     return args
 
 
-class EmbeddingProvider:
-    def __init__(self, czert_path, device):
-        self.tokenizer = BertTokenizerFast.from_pretrained(czert_path)
-        self.czert = BertModel.from_pretrained(czert_path)
-        self.czert.to(device)
-
-        self.device = device
-
-    def get_embedding(
-        self,
-        text: str,
-        right_context: str,
-    ) -> FloatTensor:
-        tokenizer_output = self.tokenizer(
-            text,
-            right_context,
-            max_length=256,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        )
-
-        input_ids = tokenizer_output["input_ids"].to(self.device)
-        token_type_ids = tokenizer_output["token_type_ids"].to(self.device)
-        attention_mask = tokenizer_output["attention_mask"].to(self.device)
-
-        with torch.no_grad():
-            czert_outputs = self.czert(
-                input_ids,
-                token_type_ids=token_type_ids,
-                attention_mask=attention_mask,
-            )
-
-        return czert_outputs.pooler_output
-
-
 class LineClassifier:
-    def __init__(self, model_path, device):
+    def __init__(self, model_path: str, device):
         model_checkpoint = torch.load(model_path, map_location=device)
         self.model = BaselineModel(
             device=device,
@@ -78,8 +42,10 @@ class LineClassifier:
         )
         self.model.to(device)
         self.model.eval()
+        self.device = device
 
-    def classify_line(self, features):
+    def __call__(self, features):
+        features = features.to(self.device)
         with torch.no_grad():
             model_outputs = self.model(features).cpu()
         prediction = torch.argmax(model_outputs)
@@ -88,27 +54,24 @@ class LineClassifier:
 
 def infer_pagexml(
     pagexml: PageLayout,
-    embedding_provider,
-    line_classifier,
+    embedding_provider: EmbeddingProvider,
+    line_classifier: LineClassifier,
 ) -> List[List[str]]:
-    lines = [line for region in pagexml.regions for line in region.lines]
+    page_geometry = PageGeometry(pagexml=pagexml)
+
     result = []
     bite = []
-    for i, line in enumerate(lines):
-        if line.transcription is None:
-            logging.warning(f'Line {line.id} has no transcription')
+    for line in page_geometry.lines:
+        if not line.text_line.transcription.strip():
+            logging.warning(f'Line {line.text_line.id} has no transcription')
             continue
 
-        text = line.transcription.strip()
-        try:
-            right_context = lines[i + 1].transcription.strip()
-        except IndexError:
-            right_context = ""
+        right_context = line.child.text_line.transcription.strip() if line.child else ""
 
-        embedding = embedding_provider.get_embedding(text, right_context)
-        predicted_class = line_classifier.classify_line(embedding)
+        embedding = embedding_provider.get_embedding(line, right_context)
+        predicted_class = line_classifier(embedding)
 
-        bite.append(line.id)
+        bite.append(line.text_line.id)
         if predicted_class == LineLabel.TERMINATING:
             result.append(bite)
             bite = []
@@ -125,22 +88,20 @@ def main():
     safe_gpu.claim_gpus()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    embedding_provider = EmbeddingProvider(CZERT_PATH, device)
+    embedding_provider = EmbeddingProvider(device, args.lm)
     line_classifier = LineClassifier(args.model, device)
 
-    os.makedirs(args.out_dir, exist_ok=True)
+    os.makedirs(args.save, exist_ok=True)
+    xml_filenames = [xml_filename for xml_filename in os.listdir(args.data) if xml_filename.endswith(".xml")]
 
-    for filename in os.listdir(args.data):
-        if not filename.endswith(".xml"):
-            continue
-
+    for filename in xml_filenames:
         path = os.path.join(args.data, filename)
         logging.info(f"Processing: {path}")
         pagexml = PageLayout(file=path)
 
         result = infer_pagexml(pagexml, embedding_provider, line_classifier)
 
-        out_path = os.path.join(args.out_dir, filename.replace(".xml", ".json"))
+        out_path = os.path.join(args.save, filename.replace(".xml", ".json"))
         with open(out_path, "w") as f:
             json.dump(result, f, indent=4)
 
