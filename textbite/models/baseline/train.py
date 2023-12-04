@@ -7,12 +7,17 @@ from time import perf_counter
 
 import torch
 from torch.utils.data import DataLoader
-from sklearn.metrics import f1_score, classification_report
+from sklearn.metrics import f1_score, classification_report, confusion_matrix
 
 from safe_gpu import safe_gpu
 
 from textbite.models.baseline.dataset import BaselineDataset
 from textbite.models.baseline.model import BaselineModel
+
+
+def confusion_report(true_labels, predicted_labels, class_names):
+    cm = confusion_matrix(true_labels, predicted_labels)
+    return f'{" ".join(cn for cn in class_names)}\n{cm}'
 
 
 def parse_arguments():
@@ -134,10 +139,14 @@ def train(
 
         print(f"Epoch {epoch + 1} finished | train f1 = {f1:.2f} loss = {train_loss/train_nb_examples:.3e} | val f1 = {f1_val:.2f} loss = {val_loss/val_nb_examples:.3e} {'| Only zeros in last val batch!' if not any(preds) else ''}")
         if (epoch + 1) % 10 == 0:
+            target_names = ["None", "Terminating", "Title"]  # should be provided by model or someone like that
             print("TRAIN REPORT:")
-            print(classification_report(epoch_labels, epoch_preds, digits=4, zero_division=0, target_names=["None", "Terminating", "Title"]))
+            print(classification_report(epoch_labels, epoch_preds, digits=4, zero_division=0, target_names=target_names))
+            print(confusion_report(epoch_labels, epoch_preds, target_names))
             print("VALIDATION REPORT:")
-            print(classification_report(epoch_labels_val, epoch_preds_val, digits=4, zero_division=0, target_names=["None", "Terminating", "Title"]))
+            print(classification_report(epoch_labels_val, epoch_preds_val, digits=4, zero_division=0, target_names=target_names))
+            print(confusion_report(epoch_labels_val, epoch_preds_val, target_names))
+            print("VALIDATION REPORT:")
             if checkpoint_dir:
                 torch.save(dict_for_saving, os.path.join(checkpoint_dir, f'checkpoint.{epoch}.pth'))
 
