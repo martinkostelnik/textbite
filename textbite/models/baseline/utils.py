@@ -12,3 +12,4 @@ class Sample:
 
     def __iter__(self):
         return iter((self.embedding, self.label))
+

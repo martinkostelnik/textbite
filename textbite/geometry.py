@@ -197,7 +197,7 @@ class LineGeometry:
         # 17. Distance from child in X axis (center - center)
         # 20. Bounding box area relative to child bounding box area
         if self.child:
-            distance_to_child = dist_l2(self.center, self.parent.center)
+            distance_to_child = dist_l2(self.center, self.child.center)
             features.append(distance_to_child)
             features.append(distance_to_child / height)
             features.append(abs(self.center.y - self.child.center.y))
@@ -207,10 +207,10 @@ class LineGeometry:
             features.extend([PLACEHOLDER_VALUE] * 5)
 
         #  8. Number of predecessors
-            features.append(self.get_number_of_predecessors())
+        features.append(self.get_number_of_predecessors())
 
         #  9. Number of children
-            features.append(self.get_number_of_successors())
+        features.append(self.get_number_of_successors())
 
         match return_type:
             case "pt":
@@ -244,6 +244,8 @@ class PageGeometry:
         for line in self.lines:
             line.set_parent(self.lines)
             line.set_child(self.lines)
+
+        self.lines_by_id = {line.text_line.id: line for line in self.lines}
         
         h, w = self.pagexml.page_size
         self.page_width = w
