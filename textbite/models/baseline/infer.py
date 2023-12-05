@@ -5,6 +5,7 @@ import os
 import json
 from typing import List
 
+import numpy as np
 import torch
 
 from safe_gpu import safe_gpu
@@ -52,16 +53,20 @@ class LineClassifier:
         prediction = torch.argmax(model_outputs)
         return LineLabel(prediction.item())
 
+    def probs(self, features):
+        features = features.to(self.device)
+        with torch.no_grad():
+            model_outputs = self.model(features).cpu()
+        return torch.softmax(model_outputs, -1)[0].numpy()
 
-def infer_pagexml(
+
+def get_geometry_probs(
     pagexml: PageLayout,
     embedding_provider: EmbeddingProvider,
     line_classifier: LineClassifier,
-) -> List[List[str]]:
+) -> PageGeometry:
     page_geometry = PageGeometry(pagexml=pagexml)
 
-    result = []
-    bite = []
     for line in page_geometry.lines:
         if not line.text_line.transcription.strip():
             logging.warning(f'Line {line.text_line.id} has no transcription')
@@ -70,7 +75,20 @@ def infer_pagexml(
         right_context = line.child.text_line.transcription.strip() if line.child else ""
 
         embedding = embedding_provider.get_embedding(line, right_context)
-        predicted_class = line_classifier(embedding)
+        line.textbite_baseline_probs = line_classifier.probs(embedding)  # TODO would be cool to have a clean way
+
+    return page_geometry
+
+
+def infer_pagexml(page_geometry: PageGeometry) -> List[List[str]]:
+    result = []
+    bite = []
+    for line in page_geometry.lines:
+        if not line.text_line.transcription.strip():
+            logging.warning(f'Line {line.text_line.id} has no transcription')
+            continue
+
+        predicted_class = np.argmax(line.textbite_baseline_probs)
 
         bite.append(line.text_line.id)
         if predicted_class == LineLabel.TERMINATING:
@@ -100,7 +118,8 @@ def main():
         logging.info(f"Processing: {path}")
         pagexml = PageLayout(file=path)
 
-        result = infer_pagexml(pagexml, embedding_provider, line_classifier)
+        page_geometry = get_geometry_probs(pagexml, embedding_provider, line_classifier)
+        result = infer_pagexml(page_geometry)
 
         out_path = os.path.join(args.save, filename.replace(".xml", ".json"))
         with open(out_path, "w") as f:
