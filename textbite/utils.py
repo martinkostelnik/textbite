@@ -15,6 +15,10 @@ def get_line_clusters(bites: List[List[str]]) -> Dict[str, int]:
     return {line_id: bite_id for bite_id, bite in enumerate(bites) for line_id in bite}
 
 
+def hash_strings(s1: str, s2: str) -> str:
+    return s1 + s2 if s1 < s2 else s2 + s1
+
+
 VALIDATION_FILENAMES_BOOK = [
     "brnensky-drak-02.jpg",
     "ceske-statni-pravo-10.jpg",
