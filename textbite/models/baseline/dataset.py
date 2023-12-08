@@ -3,12 +3,13 @@ import pickle
 
 import torch
 
-from textbite.models.baseline.utils import Sample
+from textbite.embedding import LineEmbedding
 
 
 class BaselineDataset(torch.utils.data.Dataset):
     def __init__(self, path: str):
-        self.data: List[Sample] = self.load_data(path)
+        self.data: List[LineEmbedding] = self.load_data(path)
+        self.data = [sample for sample in self.data if sample.label is not None]
 
     def __len__(self):
         return len(self.data)
@@ -19,6 +20,6 @@ class BaselineDataset(torch.utils.data.Dataset):
         label = sample.label.value
         return embedding, label
 
-    def load_data(self, path: str) -> List[Sample]:
+    def load_data(self, path: str) -> List[LineEmbedding]:
         with open(path, "rb") as f:
             return pickle.load(f)

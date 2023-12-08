@@ -13,7 +13,7 @@ from pero_ocr.document_ocr.layout import PageLayout
 
 from textbite.utils import CZERT_PATH, LineLabel
 from textbite.models.baseline.model import BaselineModel
-from textbite.models.baseline.embedding import EmbeddingProvider
+from textbite.embedding import EmbeddingProvider
 from textbite.geometry import PageGeometry
 
 
