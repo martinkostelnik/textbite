@@ -1,6 +1,7 @@
 import sys
 import os
 import argparse
+import itertools
 import logging
 from typing import Tuple
 import time
@@ -31,9 +32,9 @@ def parse_arguments():
     parser.add_argument("-n", "--hidden-width", type=int, default=256, help="Hidden size of layers.")
     parser.add_argument("-d", "--dropout", type=float, default=0.1, help="Dropout probability in the model.")
 
-    parser.add_argument("-e", "--max-epochs", type=int, default=50, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
 
+    parser.add_argument("--report-interval", type=int, default=100, help="After how many updates to report")
     parser.add_argument("--save", type=str, help="Where to save the model best by validation F1")
     parser.add_argument("--checkpoint-dir", type=str, help="Where to put all training checkpoints")
 
@@ -104,8 +105,7 @@ def evaluate(model, data, device):
             accuracy += per_edge_accuracy(outputs, graph, labels)
         val_loss += loss.cpu().item()
 
-    print(f'Val loss: {val_loss/len(data):.1f}')
-    print(f'Accuracy: {accuracy/len(data):.1f}')
+    print(f'Val loss: {val_loss/len(data):.1f} Accuracy: {accuracy/len(data):.1f}')
     return val_loss
 
 
@@ -114,7 +114,7 @@ def train(
         device,
         train_data,
         val_data,
-        epochs: int,
+        report_interval: int,
         lr: float,
         save_path: str,
         checkpoint_dir: str,
@@ -122,36 +122,32 @@ def train(
     evaluate(model, val_data, device)
 
     optim = torch.optim.Adam(model.parameters(), lr)
-    for epoch in range(epochs):
-        model.train()
+    model.train()
 
-        report_mod = 25
-        running_loss = 0.0
-        t0 = time.time()
-        grad_acc = 1
-        for graph_i, graph in enumerate(train_data):
-            node_features = graph.node_features.to(device)
-            edge_indices = graph.edge_index.to(device)
-            labels = graph.labels.to(device)
+    running_loss = 0.0
+    t0 = time.time()
+    grad_acc = 1
+    for graph_i, graph in enumerate(itertools.cycle(train_data)):
+        node_features = graph.node_features.to(device)
+        edge_indices = graph.edge_index.to(device)
+        labels = graph.labels.to(device)
 
-            outputs = model(node_features, edge_indices)
-            train_loss = per_edge_loss(outputs, graph, labels)
+        outputs = model(node_features, edge_indices)
+        train_loss = per_edge_loss(outputs, graph, labels)
+        train_loss.backward()
+        running_loss += train_loss.cpu().item()
 
-            train_loss.backward()
-            running_loss += train_loss.cpu().item()
+        if (graph_i + 1) % grad_acc == 0:
+            optim.step()
+            optim.zero_grad()
 
-            if (graph_i + 1) % grad_acc == 0:
-                optim.step()
-                grad_norm = sum(p.grad.norm() for p in model.parameters())
-                optim.zero_grad()
+        if (graph_i + 1) % report_interval == 0:
+            t_diff = time.time() - t0
+            print(f"After {graph_i+1} graphs: avg time {1000.0*t_diff/report_interval:.1f}ms, avg loss {running_loss/report_interval:.1f}")
+            running_loss = 0.0
+            t0 = time.time()
 
-            if (graph_i + 1) % report_mod == 0:
-                t_diff = time.time() - t0
-                print(f"After {graph_i+1} graphs: avg time {1000.0*t_diff/report_mod:.1f}ms, avg loss {running_loss/report_mod:.1f}, latest grad norm: {grad_norm:.1f}")
-                t0 = time.time()
-                running_loss = 0.0
-
-        evaluate(model, val_data, device)
+            evaluate(model, val_data, device)
 
         # dict_for_saving = {
         #     "state_dict": model.state_dict(),
@@ -225,7 +221,7 @@ def main():
         device=device,
         train_data=train_data,
         val_data=val_data,
-        epochs=args.max_epochs,
+        report_interval=args.report_interval,
         lr=args.lr,
         save_path=args.save,
         checkpoint_dir=args.checkpoint_dir,
