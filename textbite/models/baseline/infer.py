@@ -8,6 +8,9 @@ from typing import List
 import numpy as np
 import torch
 
+import cv2
+from textbite.visualization.utils import overlay_line
+
 from safe_gpu import safe_gpu
 
 from pero_ocr.document_ocr.layout import PageLayout
@@ -25,6 +28,8 @@ def parse_arguments():
 
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--data", required=True, type=str, help="Path to a folder with xml data.")
+    parser.add_argument("--images", type=str, help="Path to a folder with images data. Used for extra visualizations.")
+    parser.add_argument("--diagnostics", type=str, help="Path to a folder where to place diagnostic images")
     parser.add_argument("--lm", default=CZERT_PATH, type=str, help="Path to language model used for text embedding.")
     parser.add_argument("--model", required=True, type=str, help="Path to the baseline model.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
@@ -57,7 +62,7 @@ class LineClassifier:
         features = features.to(self.device)
         with torch.no_grad():
             model_outputs = self.model(features).cpu()
-        return torch.softmax(model_outputs, -1)[0].numpy()
+        return torch.softmax(model_outputs, -1).numpy()
 
 
 def get_geometry_probs(
@@ -101,6 +106,17 @@ def infer_pagexml(page_geometry: PageGeometry) -> List[List[str]]:
     return result
 
 
+def draw_probs(img, page_geometry):
+    for line in page_geometry.lines:
+        if not line.text_line.transcription.strip():
+            logging.warning(f'Line {line.text_line.id} has no transcription')
+            continue
+
+        img = overlay_line(img, line, tuple(255*x for x in line.textbite_baseline_probs), alpha=0.3)
+
+    return img
+
+
 def main():
     args = parse_arguments()
     logging.basicConfig(level=args.logging_level, force=True)
@@ -124,6 +140,21 @@ def main():
         out_path = os.path.join(args.save, filename.replace(".xml", ".json"))
         with open(out_path, "w") as f:
             json.dump(result, f, indent=4)
+
+        if args.diagnostics:
+            os.makedirs(args.diagnostics, exist_ok=True)
+
+            path_img = os.path.join(args.images, filename.replace(".xml", ".jpg"))
+            img = cv2.imread(path_img)
+
+            if img is None:
+                logging.warning(f'Failed to load {path_img}, skipping diagnostics')
+                continue
+
+            img = draw_probs(img, page_geometry)
+
+            res_filename = os.path.join(args.diagnostics, filename.replace(".xml", "-diag.jpg"))
+            cv2.imwrite(res_filename, img)
 
 
 if __name__ == "__main__":

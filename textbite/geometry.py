@@ -21,11 +21,11 @@ def dist_l2(p1: Point, p2: Point) -> float:
 
 
 def polygon_to_bbox(polygon: np.ndarray) -> AABB:
-        mins = np.min(polygon, axis=0)
-        maxs = np.max(polygon, axis=0)
+    mins = np.min(polygon, axis=0)
+    maxs = np.max(polygon, axis=0)
 
-        # (minx, miny, maxx, maxy)
-        return AABB(mins[0], mins[1], maxs[0], maxs[1])
+    # (minx, miny, maxx, maxy)
+    return AABB(mins[0], mins[1], maxs[0], maxs[1])
 
 
 def bbox_intersection(lhs: AABB, rhs: AABB) -> float:
@@ -53,9 +53,10 @@ def bbox_to_yolo(bbox: AABB, page_width, page_height) -> Tuple[float, float, flo
 class LineGeometry:
     def __init__(self, text_line: TextLine, page_geometry: Optional[PageGeometry]=None):
         self.text_line: TextLine = text_line
-        self.page_geometry: PageGeometry = page_geometry # Reference to the geometry of the entire page
+        self.page_geometry: PageGeometry = page_geometry  # Reference to the geometry of the entire page
         self.parent: Optional[LineGeometry] = None
         self.child: Optional[LineGeometry] = None
+        self.polygon = text_line.polygon
 
         self.bbox: AABB = self.get_bbox()
         assert self.bbox.xmax > self.bbox.xmin and self.bbox.ymax > self.bbox.ymin
@@ -80,7 +81,7 @@ class LineGeometry:
 
     def get_number_of_predecessors(self) -> int:
         return sum([1 for _ in self.parent_iterator()])
-    
+
     def get_number_of_successors(self) -> int:
         return sum([1 for _ in self.children_iterator()])
 
@@ -93,7 +94,7 @@ class LineGeometry:
             if parent_ptr:
                 neighbourhood.append(parent_ptr)
                 parent_ptr = parent_ptr.parent
-            
+
             if child_ptr:
                 neighbourhood.append(child_ptr)
                 child_ptr = child_ptr.child
@@ -102,18 +103,18 @@ class LineGeometry:
 
     def get_bbox(self) -> AABB:
         return polygon_to_bbox(self.text_line.polygon)
-    
+
     def get_width(self) -> float:
         return self.bbox.xmax - self.bbox.xmin
-    
+
     def get_height(self) -> float:
         return self.bbox.ymax - self.bbox.ymin
-    
+
     def get_center(self) -> Point:
         x = (self.bbox.xmin + ((self.bbox.xmax - self.bbox.xmin) / 2))
         y = (self.bbox.ymin + ((self.bbox.ymax - self.bbox.ymin) / 2))
         return Point(x, y)
-    
+
     def set_parent(self, lines: List[LineGeometry]) -> None:
         # Filter lines below me
         parent_candidates = [line for line in lines if line.center.y < self.center.y]
@@ -150,7 +151,7 @@ class LineGeometry:
         #  3. Line height relative to page average
         features.append(width / self.page_geometry.get_avg_line_width())
         features.append(height / self.page_geometry.get_avg_line_height())
-        
+
         # 10. Line width relative to page width
         # 11. Line height relative to page height
         features.append(width / self.page_geometry.page_width)
@@ -215,13 +216,12 @@ class LineGeometry:
         match return_type:
             case "pt":
                 return torch.tensor(features, dtype=torch.float32)
-            
+
             case "np":
                 return np.array(features, dtype=np.float32)
-            
+
             case _:
                 return features
-    
 
     def __str__(self) -> str:
         output_str = "LineGeometry object"
@@ -246,7 +246,7 @@ class PageGeometry:
             line.set_child(self.lines)
 
         self.lines_by_id = {line.text_line.id: line for line in self.lines}
-        
+
         h, w = self.pagexml.page_size
         self.page_width = w
         self.page_height = h
@@ -257,7 +257,7 @@ class PageGeometry:
 
     def get_avg_line_width(self) -> float:
         return sum(line.get_width() for line in self.lines) / len(self.lines)
-    
+
     def get_avg_line_height(self) -> float:
         return sum(line.get_height() for line in self.lines) / len(self.lines)
 
