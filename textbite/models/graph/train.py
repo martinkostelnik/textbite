@@ -3,7 +3,9 @@ import os
 import argparse
 import logging
 from typing import Tuple
+import time
 from time import perf_counter
+import pickle
 
 import torch
 from torch.utils.data import DataLoader
@@ -58,32 +60,30 @@ def prepare_loaders(path: str, batch_size: int, ratio: float) -> Tuple[DataLoade
 def train(
         model: GraphModel,
         device,
-        train_loader: DataLoader,
-        val_loader: DataLoader,
+        data,
         epochs: int,
         lr: float,
         save_path: str,
         checkpoint_dir: str,
-    ):
+):
     model.train()
-    
-    import pickle
-    with open(r"/home/martin/textbite/graphs.pkl", "rb") as f:
-        data =  pickle.load(f)
 
     optim = torch.optim.Adam(model.parameters(), lr)
     # criterion = torch.nn.BCELoss()
     criterion = torch.nn.BCEWithLogitsLoss()
-    losses = []
     for epoch in range(epochs):
         model.train()
 
         # for node_features, edge_indices, labels in enumerate(train_loader):
-        for graph in data:
-            train_loss = 0.0
+        report_mod = 25
+        running_loss = 0.0
+        t0 = time.time()
+        grad_acc = 1
+        for graph_i, graph in enumerate(data):
             node_features = graph.node_features.to(device)
             edge_indices = graph.edge_index.to(device)
             labels = graph.labels.to(device)
+            train_loss = 0.0
 
             outputs = model(node_features, edge_indices)
             for i, (from_idx, to_idx) in enumerate(zip(graph.edge_index[0], graph.edge_index[1])):
@@ -92,36 +92,43 @@ def train(
                 lhs = outputs[from_idx, :]
                 rhs = outputs[to_idx, :]
 
-                optim.zero_grad()
                 similarity = torch.dot(lhs, rhs)
                 label = labels[i].to(dtype=torch.float32)
-                loss = criterion(similarity, label)
 
-                train_loss += loss.cpu().item()
+                train_loss += criterion(similarity, label)
 
-                loss.backward(retain_graph=True)
+            train_loss.backward()
+            running_loss += train_loss.cpu().item()
+
+            if (graph_i + 1) % grad_acc == 0:
                 optim.step()
-            print(f"Loss = {train_loss}")
-            losses.append(train_loss)
+                optim.zero_grad()
 
-        model.eval()
-        val_loss = 0.0
-        for (node_features, edge_indices, labels) in val_loader:
-            node_features = node_features.to(device)
-            edge_indices = edge_indices.to(device)
-            labels = labels.to(device)
+            if (graph_i + 1) % report_mod == 0:
+                t_diff = time.time() - t0
+                print(f"After {graph_i+1} graphs: took average of {t_diff/report_mod:.3f} s per graph, loss {train_loss/report_mod:.1f}")
+                t0 = time.time()
+                train_loss = 0.0
 
-            with torch.no_grad():
-                outputs = model(node_features, edge_indices)
-            loss = criterion(outputs, labels)
-            val_loss += loss.cpu().item()
+        # model.eval()
+        # val_loss = 0.0
+        # for (node_features, edge_indices, labels) in val_loader:
+        #     node_features = node_features.to(device)
+        #     edge_indices = edge_indices.to(device)
+        #     labels = labels.to(device)
+        #
+        #     with torch.no_grad():
+        #         outputs = model(node_features, edge_indices)
+        #     loss = criterion(outputs, labels)
+        #     val_loss += loss.cpu().item()
 
 
-        dict_for_saving = {
-            "state_dict": model.state_dict(),
-            "n_layers": model.n_layers,
-            "hidden_size": model.hidden_size
-        }
+        # dict_for_saving = {
+        #     "state_dict": model.state_dict(),
+        #     "n_layers": model.n_layers,
+        #     "hidden_size": model.hidden_size
+        # }
+
         # if f1_val > best_f1_val:
         #     best_f1_val = f1_val
         #     print(f"SAVING MODEL at f1_val = {f1_val}")
@@ -161,10 +168,15 @@ def main():
     train_loader, val_loader = prepare_loaders(args.data, args.batch_size, args.train_ratio)
     logging.info("Data loaders ready.")
 
+    with open(args.data, "rb") as f:
+        data = pickle.load(f)
+    logging.info(f'There are {len(data)} graphs for training')
+
     # Model
     logging.info("Creating model ...")
     model = GraphModel(
         input_size=97,
+        output_size=10,
         device=device,
     )
     model = model.to(device)
@@ -175,8 +187,7 @@ def main():
     train(
         model=model,
         device=device,
-        train_loader=train_loader,
-        val_loader=val_loader,
+        data=data,
         epochs=args.max_epochs,
         lr=args.lr,
         save_path=args.save,
