@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from collections import namedtuple
 from math import sqrt
 
 import numpy as np
 import torch
 
+from shapely.ops import nearest_points
+from shapely.geometry import Polygon
+
 from pero_ocr.document_ocr.layout import PageLayout, TextLine
+
+from textbite.utils import hash_strings
 
 
 Point = namedtuple("Point", "x y")
@@ -50,13 +55,75 @@ def bbox_to_yolo(bbox: AABB, page_width, page_height) -> Tuple[float, float, flo
     return x, y, width, height
 
 
+class Ray:
+    def __init__(self, origin: Point, direction: Point):
+        self.origin = origin
+        self.direction = direction
+
+        length = sqrt(self.direction.x*self.direction.x + self.direction.y*self.direction.y)
+        x = self.direction.x / length
+        y = self.direction.y / length
+        self.direction = Point(x, y)
+
+    def intersects_bbox(self, bbox: AABB):
+        if self.direction.x == 0 and (self.origin.x < bbox.xmin or self.origin.x > bbox.xmax):
+            return None
+
+        if self.direction.y == 0 and (self.origin.y < bbox.ymin or self.origin.y > bbox.ymax):
+            return None
+
+        tmin = -float('inf')
+        tmax = float('inf')
+
+        if self.direction.x != 0:
+            tx1 = (bbox.xmin - self.origin.x) / self.direction.x
+            tx2 = (bbox.xmax - self.origin.x) / self.direction.x
+
+            tmin = max(tmin, min(tx1, tx2))
+            tmax = min(tmax, max(tx1, tx2))
+
+        if self.direction.y != 0:
+            ty1 = (bbox.ymin - self.origin.y) / self.direction.y
+            ty2 = (bbox.ymax - self.origin.y) / self.direction.y
+
+            tmin = max(tmin, min(ty1, ty2))
+            tmax = min(tmax, max(ty1, ty2))
+
+        if tmin <= tmax and tmax >= 0:
+            return max(tmin, 0)
+        else:
+            return None
+
+
+def find_visible_lines(rays: List[Ray], lines: List[LineGeometry]) -> List[LineGeometry]:
+    visible_lines = []
+
+    for ray in rays:
+        best_dist = float("inf")
+        closest_line = None
+        for line in lines:
+            dist = ray.intersects_bbox(line.bbox)
+            if dist:
+                if dist < best_dist:
+                    best_dist = dist
+                    closest_line = line
+
+        if closest_line and closest_line not in visible_lines:
+            visible_lines.append(closest_line)
+
+    return visible_lines
+
+
 class LineGeometry:
     def __init__(self, text_line: TextLine, page_geometry: Optional[PageGeometry]=None):
         self.text_line: TextLine = text_line
-        self.page_geometry: PageGeometry = page_geometry  # Reference to the geometry of the entire page
+        self.page_geometry: PageGeometry = page_geometry # Reference to the geometry of the entire page
+        self.polygon = text_line.polygon
+
         self.parent: Optional[LineGeometry] = None
         self.child: Optional[LineGeometry] = None
-        self.polygon = text_line.polygon
+        self.neighbourhood: Optional[List[LineGeometry]] = None
+        self.visible_lines: Optional[List[LineGeometry]] = None
 
         self.bbox: AABB = self.get_bbox()
         assert self.bbox.xmax > self.bbox.xmin and self.bbox.ymax > self.bbox.ymin
@@ -132,6 +199,88 @@ class LineGeometry:
         if child_candidates:
             # Take the candidate, which is closest to me in Y axis <==> The one with the lowest Y values
             self.child = min(child_candidates, key=lambda x: x.center.y)
+
+    def set_neighbourhood(self, lines: List[LineGeometry], max_neighbours: int, cached_distances: Dict[str, float]={}) -> None:
+        distances = []
+        for other_line in lines:
+            if self is other_line:
+                continue
+            hash = hash_strings(self.text_line.id, other_line.text_line.id)
+            try:
+                distance = cached_distances[hash]
+            except KeyError:
+                nps = nearest_points(Polygon(self.text_line.polygon), Polygon(other_line.text_line.polygon))
+                p1 = Point(nps[0].x, nps[0].y)
+                p2 = Point(nps[1].x, nps[1].y)
+                distance = dist_l2(p1, p2)
+                cached_distances[hash] = distance
+
+            distances.append((other_line, distance))
+
+        self.neighbourhood = []
+        mx = max_neighbours if len(distances) > max_neighbours else len(distances)
+        while len(self.neighbourhood) != mx:
+            m = min(distances, key=lambda x: x[1])
+            self.neighbourhood.append(m[0])
+            distances.remove(m)
+
+    def set_visible_lines(self, lines: List[LineGeometry]) -> None:
+        self.visible_lines = []
+        N_HORIZONTAL_RAYS = 100
+        y_span = self.page_geometry.page_height * 0.1
+        y_step = y_span / N_HORIZONTAL_RAYS
+        other_lines = [l for l in lines if not self is l]
+
+        # Create vertical rays
+        vertical_rays = []
+        mid_point_x = self.bbox.xmin + ((self.bbox.xmax - self.bbox.xmin) / 2.0)
+        epsilon = (self.bbox.xmax - self.bbox.xmin) * 0.05
+        vertical_rays.append(Ray(Point(self.bbox.xmin + epsilon, self.center.y), Point(0, 1)))
+        vertical_rays.append(Ray(Point(mid_point_x, self.center.y), Point(0, 1)))
+        vertical_rays.append(Ray(Point(self.bbox.xmax - epsilon, self.center.y), Point(0, 1)))
+        vertical_rays.append(Ray(Point(self.bbox.xmin + epsilon, self.center.y), Point(0, -1)))
+        vertical_rays.append(Ray(Point(mid_point_x, self.center.y), Point(0, -1)))
+        vertical_rays.append(Ray(Point(self.bbox.xmax - epsilon, self.center.y), Point(0, -1)))
+
+        # Add all lines intersected by vertical rays to visible_lines
+        vertical_visible_lines = find_visible_lines(vertical_rays, other_lines)
+        self.visible_lines.extend(vertical_visible_lines)
+
+        # Create horizontal rays
+        horizontal_rays = []
+        mid_point_y = self.bbox.ymin + ((self.bbox.ymax - self.bbox.ymin) / 2.0)
+
+        # HORIZONTAL RAYS (legacy)
+        # horizontal_rays.append(Ray(Point(bbox.xmax, mid_point_y), Point(1, 1)))
+        # horizontal_rays.append(Ray(Point(bbox.xmax, mid_point_y), Point(1, 0)))
+        # horizontal_rays.append(Ray(Point(bbox.xmax, mid_point_y), Point(1, -1)))
+        # horizontal_visible_lines = find_visible_lines(horizontal_rays, other_lines)
+        # horizontal_visible_lines = [l for l in horizontal_visible_lines if l not in self.visible_lines]
+        # self.visible_lines.extend(horizontal_visible_lines)
+        # for l in horizontal_visible_lines:
+        #     for ll in l.parent_iterator():
+        #         if ll not in self.visible_lines:
+        #             self.visible_lines.append(ll)
+        #     for ll in l.children_iterator():
+        #         if ll not in self.visible_lines:
+        #             self.visible_lines.append(ll)
+
+        # Horizontal rays (current)
+        y_start = 0.0 - (y_span / 2.0)
+        y = y_start
+        for _ in range(N_HORIZONTAL_RAYS):
+            horizontal_rays.append(Ray(Point(self.bbox.xmax, mid_point_y), Point(70, y)))
+            y += y_step
+
+        horizontal_visible_lines = find_visible_lines(horizontal_rays, other_lines)
+        self.visible_lines.extend(horizontal_visible_lines)
+        for l in horizontal_visible_lines:
+            if l.child and l.child not in self.visible_lines:
+                self.visible_lines.append(l.child)
+            if l.parent and l.parent not in self.visible_lines:
+                self.visible_lines.append(l.parent)
+
+        self.visible_lines = list(set(self.visible_lines))
 
     def get_features(self, return_type: Optional[str]=None) -> List | np.ndarray | torch.FloatTensor:
         assert self.page_geometry, "Cannot determine features without data of the entire page"
@@ -261,6 +410,17 @@ class PageGeometry:
     def get_avg_line_height(self) -> float:
         return sum(line.get_height() for line in self.lines) / len(self.lines)
 
+    def set_neighbourhoods(self, max_neighbours: int=10) -> None:
+        cached_distances = {}
+        for line in self.lines:
+            other_lines = [l for l in self.lines if not (l is line)]
+            line.set_neighbourhood(other_lines, max_neighbours, cached_distances)
+
+    def set_visibility(self) -> None:
+        for line in self.lines:
+            other_lines = [l for l in self.lines if not (l is line)]
+            line.set_visible_lines(other_lines)
+
     def __str__(self) -> str:
         output_str = f"PageGeometry object"
         output_str += f"\n{len(self.lines)} lines."
@@ -274,10 +434,9 @@ if __name__ == "__main__":
     pagexml = PageLayout(file=EXAMPLE_PATH)
 
     geometry1 = PageGeometry(pagexml=pagexml)
-    geometry2 = PageGeometry(path=EXAMPLE_PATH)
 
-    print(geometry1)
-    print(geometry2)
+    geometry1.set_neighbourhoods()
+    geometry1.set_visibility()
 
     for line in geometry1.lines:
-        print(line)
+        print(len(line.visible_lines))

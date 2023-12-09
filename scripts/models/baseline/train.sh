@@ -9,7 +9,7 @@ BASE=/home/martin/textbite
 source $BASE/../semant/venv/bin/activate
 
 SCRIPTS_DIR=$BASE/textbite/models/baseline
-DATA_PATH=$BASE/data/segmentation/data-combined-lm72test.pkl
+DATA_PATH=$BASE/data/segmentation/data-combined-lm72.pkl
 
 python -u $SCRIPTS_DIR/train.py \
     --data $DATA_PATH \
