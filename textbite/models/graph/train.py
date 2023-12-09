@@ -14,7 +14,7 @@ from safe_gpu import safe_gpu
 
 from textbite.models.graph.dataset import GraphDataset
 from textbite.models.graph.model import GraphModel
-from textbite.models.graph.create_graphs import Graph
+from textbite.models.graph.create_graphs import Graph  # needed for unpickling
 
 
 def parse_arguments():
@@ -83,7 +83,7 @@ def train(
             node_features = graph.node_features.to(device)
             edge_indices = graph.edge_index.to(device)
             labels = graph.labels.to(device)
-            train_loss = 0.0
+            train_loss = torch.tensor(0.0, device=device)
 
             outputs = model(node_features, edge_indices)
             for i, (from_idx, to_idx) in enumerate(zip(graph.edge_index[0], graph.edge_index[1])):
@@ -102,13 +102,14 @@ def train(
 
             if (graph_i + 1) % grad_acc == 0:
                 optim.step()
+                grad_norm = sum(p.grad.norm() for p in model.parameters())
                 optim.zero_grad()
 
             if (graph_i + 1) % report_mod == 0:
                 t_diff = time.time() - t0
-                print(f"After {graph_i+1} graphs: took average of {t_diff/report_mod:.3f} s per graph, loss {train_loss/report_mod:.1f}")
+                print(f"After {graph_i+1} graphs: avg time {1000.0*t_diff/report_mod:.1f}ms, avg loss {running_loss/report_mod:.1f}, latest grad norm: {grad_norm:.1f}")
                 t0 = time.time()
-                train_loss = 0.0
+                running_loss = 0.0
 
         # model.eval()
         # val_loss = 0.0
@@ -121,7 +122,6 @@ def train(
         #         outputs = model(node_features, edge_indices)
         #     loss = criterion(outputs, labels)
         #     val_loss += loss.cpu().item()
-
 
         # dict_for_saving = {
         #     "state_dict": model.state_dict(),
