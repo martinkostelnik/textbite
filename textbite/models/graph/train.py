@@ -57,45 +57,85 @@ def prepare_loaders(path: str, batch_size: int, ratio: float) -> Tuple[DataLoade
     return train_loader, val_loader
 
 
+def per_edge_loss(node_features, graph, labels):
+    criterion = torch.nn.BCEWithLogitsLoss()
+    loss = torch.tensor(0.0, device=node_features.device)
+    for i, (from_idx, to_idx) in enumerate(zip(graph.edge_index[0], graph.edge_index[1])):
+        from_idx = from_idx.item()
+        to_idx = to_idx.item()
+        lhs = node_features[from_idx, :]
+        rhs = node_features[to_idx, :]
+
+        similarity = torch.dot(lhs, rhs)
+        label = labels[i].to(dtype=torch.float32)
+
+        loss += criterion(similarity, label)
+
+    return loss
+
+
+# TODO: DET or similar will be super useful, it's all terribly mis-calibrated so far
+def per_edge_accuracy(node_features, graph, labels):
+    nb_hits = 0
+    for i, (from_idx, to_idx) in enumerate(zip(graph.edge_index[0], graph.edge_index[1])):
+        from_idx = from_idx.item()
+        to_idx = to_idx.item()
+        lhs = node_features[from_idx, :]
+        rhs = node_features[to_idx, :]
+
+        similarity = torch.dot(lhs, rhs)
+        nb_hits += (similarity > 0.5) == labels[i]
+
+    return nb_hits / len(graph.edge_index[0])
+
+
+def evaluate(model, data, device):
+    model.eval()
+    val_loss = 0.0
+    accuracy = 0.0
+    for graph in data:
+        node_features = graph.node_features.to(device)
+        edge_indices = graph.edge_index.to(device)
+        labels = graph.labels.to(device)
+
+        with torch.no_grad():
+            outputs = model(node_features, edge_indices)
+            loss = per_edge_loss(outputs, graph, labels)
+            accuracy += per_edge_accuracy(outputs, graph, labels)
+        val_loss += loss.cpu().item()
+
+    print(f'Val loss: {val_loss/len(data):.1f}')
+    print(f'Accuracy: {accuracy/len(data):.1f}')
+    return val_loss
+
+
 def train(
         model: GraphModel,
         device,
-        data,
+        train_data,
+        val_data,
         epochs: int,
         lr: float,
         save_path: str,
         checkpoint_dir: str,
 ):
-    model.train()
+    evaluate(model, val_data, device)
 
     optim = torch.optim.Adam(model.parameters(), lr)
-    # criterion = torch.nn.BCELoss()
-    criterion = torch.nn.BCEWithLogitsLoss()
     for epoch in range(epochs):
         model.train()
 
-        # for node_features, edge_indices, labels in enumerate(train_loader):
         report_mod = 25
         running_loss = 0.0
         t0 = time.time()
         grad_acc = 1
-        for graph_i, graph in enumerate(data):
+        for graph_i, graph in enumerate(train_data):
             node_features = graph.node_features.to(device)
             edge_indices = graph.edge_index.to(device)
             labels = graph.labels.to(device)
-            train_loss = torch.tensor(0.0, device=device)
 
             outputs = model(node_features, edge_indices)
-            for i, (from_idx, to_idx) in enumerate(zip(graph.edge_index[0], graph.edge_index[1])):
-                from_idx = from_idx.item()
-                to_idx = to_idx.item()
-                lhs = outputs[from_idx, :]
-                rhs = outputs[to_idx, :]
-
-                similarity = torch.dot(lhs, rhs)
-                label = labels[i].to(dtype=torch.float32)
-
-                train_loss += criterion(similarity, label)
+            train_loss = per_edge_loss(outputs, graph, labels)
 
             train_loss.backward()
             running_loss += train_loss.cpu().item()
@@ -111,17 +151,7 @@ def train(
                 t0 = time.time()
                 running_loss = 0.0
 
-        # model.eval()
-        # val_loss = 0.0
-        # for (node_features, edge_indices, labels) in val_loader:
-        #     node_features = node_features.to(device)
-        #     edge_indices = edge_indices.to(device)
-        #     labels = labels.to(device)
-        #
-        #     with torch.no_grad():
-        #         outputs = model(node_features, edge_indices)
-        #     loss = criterion(outputs, labels)
-        #     val_loss += loss.cpu().item()
+        evaluate(model, val_data, device)
 
         # dict_for_saving = {
         #     "state_dict": model.state_dict(),
@@ -163,14 +193,20 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Training on: {device}")
 
-    # Data loaders
-    logging.info("Creating data loaders ...")
-    train_loader, val_loader = prepare_loaders(args.data, args.batch_size, args.train_ratio)
-    logging.info("Data loaders ready.")
+    # # Data loaders
+    # logging.info("Creating data loaders ...")
+    # train_loader, val_loader = prepare_loaders(args.data, args.batch_size, args.train_ratio)
+    # logging.info("Data loaders ready.")
 
     with open(args.data, "rb") as f:
         data = pickle.load(f)
     logging.info(f'There are {len(data)} graphs for training')
+
+    last_train_idx = int(args.train_ratio * len(data))
+    train_data = data[:last_train_idx]
+    val_data = data[last_train_idx:]
+    logging.info(f'Train data has {len(train_data)} graphs')
+    logging.info(f'Valid data has {len(val_data)} graphs')
 
     # Model
     logging.info("Creating model ...")
@@ -187,7 +223,8 @@ def main():
     train(
         model=model,
         device=device,
-        data=data,
+        train_data=train_data,
+        val_data=val_data,
         epochs=args.max_epochs,
         lr=args.lr,
         save_path=args.save,
