@@ -105,7 +105,7 @@ def evaluate(model, data, device):
             accuracy += per_edge_accuracy(outputs, graph, labels)
         val_loss += loss.cpu().item()
 
-    print(f'Val loss: {val_loss/len(data):.1f} Accuracy: {accuracy/len(data):.1f}')
+    print(f'Val loss: {val_loss/len(data):.1f} Edge accuracy: {100.0 * accuracy/len(data):.2f} %')
     return val_loss
 
 
@@ -174,6 +174,25 @@ def train(
         #         torch.save(dict_for_saving, os.path.join(checkpoint_dir, f'checkpoint.{epoch}.pth'))
 
 
+class NodeNormalizer:
+    def __init__(self, graphs):
+        stats_1 = torch.zeros_like(graphs[0].node_features[0])
+        stats_2 = torch.zeros_like(graphs[0].node_features[0])
+        nb_nodes = 0
+
+        for g in graphs:
+            stats_1 += g.node_features.sum(axis=0)
+            stats_2 += g.node_features.pow(2).sum(axis=0)
+            nb_nodes += g.node_features.shape[0]
+
+        self.mu = stats_1 / nb_nodes
+        self.std = (stats_2 / nb_nodes - self.mu ** 2) ** 0.5
+
+    def normalize_graphs(self, graphs):
+        for g in graphs:
+            g.node_features = (g.node_features - self.mu) / self.std
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -201,6 +220,11 @@ def main():
     last_train_idx = int(args.train_ratio * len(data))
     train_data = data[:last_train_idx]
     val_data = data[last_train_idx:]
+
+    normalizer = NodeNormalizer(train_data)
+    normalizer.normalize_graphs(train_data)
+    normalizer.normalize_graphs(val_data)
+
     logging.info(f'Train data has {len(train_data)} graphs')
     logging.info(f'Valid data has {len(val_data)} graphs')
 
