@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from safe_gpu import safe_gpu
 
 from textbite.models.graph.dataset import GraphDataset
-from textbite.models.graph.model import GraphModel
+from textbite.models.graph.model import GraphModel, NodeNormalizer
 from textbite.models.graph.create_graphs import Graph  # needed for unpickling
 
 
@@ -37,6 +37,7 @@ def parse_arguments():
     parser.add_argument("--report-interval", type=int, default=100, help="After how many updates to report")
     parser.add_argument("--save", type=str, help="Where to save the model best by validation F1")
     parser.add_argument("--checkpoint-dir", type=str, help="Where to put all training checkpoints")
+    parser.add_argument("--normalizer-out", type=str, help="Where to normalizer")
 
     args = parser.parse_args()
     return args
@@ -176,25 +177,6 @@ def train(
         #     print("VALIDATION REPORT:")
 
 
-class NodeNormalizer:
-    def __init__(self, graphs):
-        stats_1 = torch.zeros_like(graphs[0].node_features[0])
-        stats_2 = torch.zeros_like(graphs[0].node_features[0])
-        nb_nodes = 0
-
-        for g in graphs:
-            stats_1 += g.node_features.sum(axis=0)
-            stats_2 += g.node_features.pow(2).sum(axis=0)
-            nb_nodes += g.node_features.shape[0]
-
-        self.mu = stats_1 / nb_nodes
-        self.std = (stats_2 / nb_nodes - self.mu ** 2) ** 0.5
-
-    def normalize_graphs(self, graphs):
-        for g in graphs:
-            g.node_features = (g.node_features - self.mu) / self.std
-
-
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -225,6 +207,11 @@ def main():
     val_data = data[last_train_idx:]
 
     normalizer = NodeNormalizer(train_data)
+    if args.normalizer_out:
+        with open(args.normalizer_out, 'wb') as f:
+            pickle.dump(normalizer, f)
+    else:
+        logging.warning(f'Not save the normalizer anywhere!')
     normalizer.normalize_graphs(train_data)
     normalizer.normalize_graphs(val_data)
 

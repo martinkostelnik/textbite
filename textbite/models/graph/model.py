@@ -31,3 +31,22 @@ class GraphModel(torch.nn.Module):
         x = self.conv3(x, edge_index)
 
         return x
+
+
+class NodeNormalizer:
+    def __init__(self, graphs):
+        stats_1 = torch.zeros_like(graphs[0].node_features[0])
+        stats_2 = torch.zeros_like(graphs[0].node_features[0])
+        nb_nodes = 0
+
+        for g in graphs:
+            stats_1 += g.node_features.sum(axis=0)
+            stats_2 += g.node_features.pow(2).sum(axis=0)
+            nb_nodes += g.node_features.shape[0]
+
+        self.mu = stats_1 / nb_nodes
+        self.std = (stats_2 / nb_nodes - self.mu ** 2) ** 0.5
+
+    def normalize_graphs(self, graphs):
+        for g in graphs:
+            g.node_features = (g.node_features - self.mu) / self.std
