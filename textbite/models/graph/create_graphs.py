@@ -11,19 +11,32 @@ from textbite.embedding import LineEmbedding
 
 
 class Graph:
-    def __init__(self):
-        self.node_features = [] # Shape (n_nodes, n_features)
-        self.edge_index = [] # Shape (2, n_edges)
-        self.edge_attr = [] # Shape (n_edges, n_features)
-        self.labels = [] # Shape (1, n_edges)
+    def __init__(self, geometry, node_embeddings_dict):
+        node_features = []
+        labels = []
 
-    def to_pt(self):
-        self.node_features = torch.stack(self.node_features)
-        self.edge_index = torch.tensor(self.edge_index)
-        self.edge_attr = torch.tensor(self.edge_attr)
-        self.labels = torch.tensor(self.labels)
+        from_indices = []
+        to_indices = []
+        for line_idx, line in enumerate(geometry.lines):
+            embedding = node_embeddings_dict[line.text_line.id].embedding
+            node_features.append(embedding)
 
-    def __str__ (self):
+            line_bite_id = node_embeddings_dict[line.text_line.id].bite_id
+            connected_lines = line.neighbourhood + line.visible_lines
+            for connected_line in connected_lines:
+                from_indices.append(line_idx)
+                to_idx = geometry.lines.index(connected_line)
+                to_indices.append(to_idx)
+
+                connected_line_bite_id = node_embeddings_dict[connected_line.text_line.id].bite_id
+                labels.append(int(line_bite_id == connected_line_bite_id))
+
+        self.node_features = torch.stack(node_features)  # Shape (n_nodes, n_features)
+        self.edge_index = torch.tensor([from_indices, to_indices])  # Shape (2, n_edges)
+        self.edge_attr = torch.tensor([])  # Shape (n_edges, n_features), but we have none
+        self.labels = torch.tensor(labels)  # Shape (1, n_edges)
+
+    def __str__(self):
         result_str = ""
 
         result_str += f"Node features shape: {self.node_features.shape}\n"
@@ -66,27 +79,7 @@ def main():
         geometry.set_neighbourhoods()
         geometry.set_visibility()
 
-        g = Graph()
-        from_indices = []
-        to_indices = []
-        for line_idx, line in enumerate(geometry.lines):
-            embedding = node_embeddings_dict[line.text_line.id].embedding
-            g.node_features.append(embedding)
-
-            connected_lines = line.neighbourhood + line.visible_lines
-            for connected_line in connected_lines:
-                to_idx = geometry.lines.index(connected_line)
-                from_indices.append(line_idx)
-                to_indices.append(to_idx)
-                
-                line_bite_id = node_embeddings_dict[line.text_line.id].bite_id
-                connected_line_bite_id = node_embeddings_dict[connected_line.text_line.id].bite_id
-                g.labels.append(int(line_bite_id == connected_line_bite_id))
-
-        g.edge_index.extend([from_indices, to_indices])
-
-        g.to_pt()
-        graphs.append(g)
+        graphs.append(Graph(geometry, node_embeddings_dict))
         logging.info(f"Processed: {xml_path}")
 
     save_path = os.path.join(args.save, "graphs.pkl")
