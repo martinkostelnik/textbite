@@ -1,9 +1,6 @@
-from typing import Callable
-
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
-from torch import nn
 
 
 class GraphModel(torch.nn.Module):
@@ -14,12 +11,13 @@ class GraphModel(torch.nn.Module):
         output_size: int,
         n_layers: int = 3,
         hidden_size: int = 128,
-        activation: Callable = nn.ReLU(),
         dropout_prob: float = 0.0,
     ):
         super().__init__()
 
         self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
 
         self.conv1 = GCNConv(self.input_size, hidden_size)
         self.conv2 = GCNConv(hidden_size, hidden_size)

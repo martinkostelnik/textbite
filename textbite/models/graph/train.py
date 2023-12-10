@@ -149,11 +149,15 @@ def train(
 
             evaluate(model, val_data, device)
 
-        # dict_for_saving = {
-        #     "state_dict": model.state_dict(),
-        #     "n_layers": model.n_layers,
-        #     "hidden_size": model.hidden_size
-        # }
+            if checkpoint_dir:
+                dict_for_saving = {
+                    "state_dict": model.state_dict(),
+                    "hidden_size": model.hidden_size,
+                    "input_size": model.input_size,
+                    "output_size": model.output_size,
+                }
+
+                torch.save(dict_for_saving, os.path.join(checkpoint_dir, f'checkpoint.{graph_i}.pth'))
 
         # if f1_val > best_f1_val:
         #     best_f1_val = f1_val
@@ -170,8 +174,6 @@ def train(
         #     print(classification_report(epoch_labels_val, epoch_preds_val, digits=4, zero_division=0, target_names=target_names))
         #     print(confusion_report(epoch_labels_val, epoch_preds_val, target_names))
         #     print("VALIDATION REPORT:")
-        #     if checkpoint_dir:
-        #         torch.save(dict_for_saving, os.path.join(checkpoint_dir, f'checkpoint.{epoch}.pth'))
 
 
 class NodeNormalizer:
@@ -199,6 +201,7 @@ def main():
         force=True,
     )
     args = parse_arguments()
+    logging.info(f'{args}')
     safe_gpu.claim_gpus()
 
     if args.checkpoint_dir:
