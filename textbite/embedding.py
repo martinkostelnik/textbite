@@ -115,22 +115,33 @@ def main():
 
     samples = []
     xml_filenames = [xml_filename for xml_filename in os.listdir(args.xml) if xml_filename.endswith(".xml")]
+    processed = 0
     for xml_filename in xml_filenames:
         xml_path = os.path.join(args.xml, xml_filename)
         geometry = PageGeometry(xml_path)
 
+        ids = [line.id for line in geometry.pagexml.lines_iterator()]
+        if not (set(id_to_label_dict.keys()).intersection(ids) or set(id_to_bite_id_dict.keys()).intersection(ids)):
+            print(f"{xml_filename} not labelled, skipping")
+            continue
+
         for line in geometry.lines:
             label = id_to_label_dict[line.text_line.id] if line.text_line.id in id_to_label_dict else None
             bite_id_ = id_to_bite_id_dict[line.text_line.id] if line.text_line.id in id_to_bite_id_dict else None
-            right_context = line.child.text_line.transcription.strip() if line.child else ""
+
+            if line.child and line.child.text_line.transcription and line.child.text_line.transcription.strip():
+                right_context = line.child.text_line.transcription.strip()
+            else:
+                right_context = ""
 
             embedding = embedding_provider.get_embedding(line, right_context=right_context)
-            sample = LineEmbedding(embedding, geometry.pagexml.id, line.text_line.id, label=label, bite_id=bite_id_)
+            sample = LineEmbedding(embedding, f"{geometry.pagexml.id}.jpg", line.text_line.id, label=label, bite_id=bite_id_)
             samples.append(sample)
 
-        logging.info(f"Processed {xml_path}")
+        processed += 1
+        logging.info(f" {processed}: Processed {xml_path}")
 
-    save_path = os.path.join(args.save, "graph-embeddings.pkl")
+    save_path = os.path.join(args.save, "full-embeddings-lm72.pkl")
     with open(save_path, "wb") as f:
         pickle.dump(samples, f)
 

@@ -19,6 +19,7 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--yolo", required=True, type=str, help="Path to a folder with yolo files.")
     parser.add_argument('--images', required=True, type=str, help="Path to a folder with image files.")
     parser.add_argument("--save", required=True, type=str, help="Path to a folder where results will be saved.")
@@ -64,7 +65,8 @@ def draw_bboxes(image, lines):
 def main():
     args = parse_arguments()
     logging.basicConfig(level=args.logging_level,force=True)
-
+    os.makedirs(args.save, exist_ok=True)
+    
     yolo_files = [filename for filename in os.listdir(args.yolo) if filename.endswith(".yolo")]
     
     for yolo_file in yolo_files:

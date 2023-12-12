@@ -3,12 +3,9 @@ import argparse
 import os
 import logging
 
-import numpy as np
-
 from pero_ocr.document_ocr.layout import PageLayout
 
-from textbite.utils import LineLabel
-from textbite.data_processing.label_studio import LabelStudioExport, AnnotatedDocument, RegionType
+from textbite.data_processing.label_studio import LabelStudioExport
 
 
 def parse_arguments():
@@ -24,9 +21,6 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
-
-
-
 
 
 def main():

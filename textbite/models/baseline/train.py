@@ -2,8 +2,9 @@ import sys
 import os
 import argparse
 import logging
-from typing import Tuple
+from typing import Tuple, List
 from time import perf_counter
+import pickle
 
 import torch
 from torch.utils.data import DataLoader
@@ -13,6 +14,11 @@ from safe_gpu import safe_gpu
 
 from textbite.models.baseline.dataset import BaselineDataset
 from textbite.models.baseline.model import BaselineModel
+from textbite.embedding import LineEmbedding
+from textbite.utils import FILENAMES_EXCLUDED_FROM_TRAINING, \
+                           VALIDATION_FILENAMES_BOOK, \
+                           VALIDATION_FILENAMES_DICTIONARY, \
+                           VALIDATION_FILENAMES_PERIODICAL
 
 
 def confusion_report(true_labels, predicted_labels, class_names):
@@ -28,7 +34,6 @@ def parse_arguments():
     parser.add_argument("--data", required=True, type=str, help="Path to a pickle file with training data.")
 
     parser.add_argument("-b", "--batch-size", type=int, default=64, help="Batch size")
-    parser.add_argument("-r", "--train-ratio", type=float, default=0.8, help="Train/Validation ratio.")
 
     parser.add_argument("-l", "--nb-hidden", type=int, default=2, help="Number of layers in the model.")
     parser.add_argument("-n", "--hidden-width", type=int, default=256, help="Hidden size of layers.")
@@ -44,27 +49,66 @@ def parse_arguments():
     return args
 
 
-def prepare_loaders(path: str, batch_size: int, ratio: float) -> Tuple[DataLoader, DataLoader]:
+def prepare_loaders(path: str, batch_size: int) -> Tuple[DataLoader, DataLoader, DataLoader, DataLoader]:
     start = perf_counter()
-    dataset = BaselineDataset(path)
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    
+    data = [sample for sample in data if sample.label]
+    train_data = [sample for sample in data if sample.page_id not in FILENAMES_EXCLUDED_FROM_TRAINING]
+    val_books = [sample for sample in data if sample.page_id in VALIDATION_FILENAMES_BOOK]
+    val_dicts = [sample for sample in data if sample.page_id in VALIDATION_FILENAMES_DICTIONARY]
+    val_periodicals = [sample for sample in data if sample.page_id in VALIDATION_FILENAMES_PERIODICAL]
 
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [ratio, 1 - ratio])
+    train_dataset = BaselineDataset(train_data)
+    val_dataset_books = BaselineDataset(val_books)
+    val_dataset_dicts = BaselineDataset(val_dicts)
+    val_dataset_periods = BaselineDataset(val_periodicals)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size)
+    val_loader_books = torch.utils.data.DataLoader(val_dataset_books, batch_size=batch_size)
+    val_loader_dicts = torch.utils.data.DataLoader(val_dataset_dicts, batch_size=batch_size)
+    val_loader_periods = torch.utils.data.DataLoader(val_dataset_periods, batch_size=batch_size)
 
     end = perf_counter()
     t = end - start
-    logging.info(f"Train data loaded. n_samples = {len(dataset)}\ttrain = {len(train_dataset)}\tval = {len(val_dataset)}\ttook {t:.1f} s")
+    logging.info(f"Train data loaded. train = {len(train_dataset)}\tval_books = {len(val_dataset_books)}\tval_dicts = {len(val_dataset_dicts)}\tval_periods {len(val_dataset_periods)}\ttook {t:.1f} s")
 
-    return train_loader, val_loader
+    return train_loader, val_loader_books, val_loader_dicts, val_loader_periods
+
+
+def validate(model, criterion, loader: DataLoader, device) -> Tuple[float, List[int], List[int]]:
+    model.eval()
+
+    all_labels = []
+    all_preds = []
+    total_loss = 0.0
+    n_examples = 0
+
+    for embeddings, labels in loader:
+        embeddings = embeddings.to(device)
+        labels = labels.to(device)
+
+        with torch.no_grad():
+            outputs = model(embeddings)
+        loss = criterion(outputs, labels)
+        preds = torch.argmax(outputs, dim=1)
+
+        n_examples += len(labels)
+        total_loss += loss.cpu().item()
+        all_labels.extend(labels.cpu())
+        all_preds.extend(preds.cpu())
+
+    return loss / n_examples, all_labels, all_preds
 
 
 def train(
         model: BaselineModel,
         device,
         train_loader: DataLoader,
-        val_loader: DataLoader,
+        val_loader_books: DataLoader,
+        val_loader_dicts: DataLoader,
+        val_loader_periodicals: DataLoader,
         epochs: int,
         lr: float,
         save_path: str,
@@ -82,13 +126,10 @@ def train(
         epoch_labels = []
         epoch_preds = []
 
-        epoch_labels_val = []
-        epoch_preds_val = []
-
         model.train()
         train_nb_examples = 0
         train_loss = 0.0
-        for step, (embeddings, labels) in enumerate(train_loader):
+        for embeddings, labels in train_loader:
             embeddings = embeddings.to(device)
             labels = labels.to(device)
 
@@ -106,26 +147,15 @@ def train(
             epoch_labels.extend(labels.cpu())
             epoch_preds.extend(preds.cpu())
 
-        model.eval()
-        val_nb_examples = 0
-        val_loss = 0.0
-        for embeddings, labels in val_loader:
-            embeddings = embeddings.to(device)
-            labels = labels.to(device)
-
-            with torch.no_grad():
-                outputs = model(embeddings)
-            loss = criterion(outputs, labels)
-            preds = torch.argmax(outputs, dim=1)
-
-            val_nb_examples += len(labels)
-            val_loss += loss.cpu().item()
-
-            epoch_labels_val.extend(labels.cpu())
-            epoch_preds_val.extend(preds.cpu())
-
         f1 = f1_score(epoch_labels, epoch_preds, average="macro")
-        f1_val = f1_score(epoch_labels_val, epoch_preds_val, average="macro")
+
+        val_loss_books, val_labels_books, val_preds_books = validate(model, criterion, val_loader_books, device)
+        val_loss_dicts, val_labels_dicts, val_preds_dicts = validate(model, criterion, val_loader_dicts, device)
+        val_loss_periodicals, val_labels_periodicals, val_preds_periodicals = validate(model, criterion, val_loader_periodicals, device)
+        
+        val_labels = val_labels_books + val_labels_dicts + val_labels_periodicals
+        val_preds = val_preds_books + val_preds_dicts + val_preds_periodicals
+        f1_val = f1_score(val_labels, val_preds, average="macro")
 
         dict_for_saving = {
             "state_dict": model.state_dict(),
@@ -134,19 +164,24 @@ def train(
         }
         if f1_val > best_f1_val:
             best_f1_val = f1_val
-            print(f"SAVING MODEL at f1_val = {f1_val}")
+            print(f"SAVING MODEL at f1_val = {f1_val:.4f}")
             torch.save(dict_for_saving, os.path.join(save_path, "BaselineModel.pth"))
 
-        print(f"Epoch {epoch + 1} finished | train f1 = {f1:.2f} loss = {train_loss/train_nb_examples:.3e} | val f1 = {f1_val:.2f} loss = {val_loss/val_nb_examples:.3e} {'| Only zeros in last val batch!' if not any(preds) else ''}")
+        print(f"Epoch {epoch + 1} finished | train f1 = {f1:.4f} loss = {train_loss/train_nb_examples:.3e} | val f1 = {f1_val:.4f} loss_books = {val_loss_books:.3e} loss_dicts = {val_loss_dicts:.3e} loss_periodicals = {val_loss_periodicals:.3e}")
         if (epoch + 1) % 10 == 0:
             target_names = ["None", "Terminating", "Title"]  # should be provided by model or someone like that
             print("TRAIN REPORT:")
             print(classification_report(epoch_labels, epoch_preds, digits=4, zero_division=0, target_names=target_names))
             print(confusion_report(epoch_labels, epoch_preds, target_names))
-            print("VALIDATION REPORT:")
-            print(classification_report(epoch_labels_val, epoch_preds_val, digits=4, zero_division=0, target_names=target_names))
-            print(confusion_report(epoch_labels_val, epoch_preds_val, target_names))
-            print("VALIDATION REPORT:")
+            print("VALIDATION REPORT BOOKS:")
+            print(classification_report(val_labels_books, val_preds_books, digits=4, zero_division=0, target_names=target_names))
+            print(confusion_report(val_labels_books, val_preds_books, target_names))
+            print("VALIDATION REPORT DICTS:")
+            print(classification_report(val_labels_dicts, val_preds_dicts, digits=4, zero_division=0, target_names=target_names))
+            print(confusion_report(val_labels_dicts, val_preds_dicts, target_names))
+            print("VALIDATION REPORT PERIODICALS:")
+            print(classification_report(val_labels_periodicals, val_preds_periodicals, digits=4, zero_division=0, target_names=target_names))
+            print(confusion_report(val_labels_periodicals, val_preds_periodicals, target_names))
             if checkpoint_dir:
                 torch.save(dict_for_saving, os.path.join(checkpoint_dir, f'checkpoint.{epoch}.pth'))
 
@@ -161,7 +196,7 @@ def main(args):
 
     # Data loaders
     logging.info("Creating data loaders ...")
-    train_loader, val_loader = prepare_loaders(args.data, args.batch_size, args.train_ratio)
+    train_loader, val_loader_books, val_loader_dicts, val_loader_periodicals = prepare_loaders(args.data, args.batch_size)
     logging.info("Data loaders ready.")
 
     # Model
@@ -181,7 +216,9 @@ def main(args):
         model=model,
         device=device,
         train_loader=train_loader,
-        val_loader=val_loader,
+        val_loader_books=val_loader_books,
+        val_loader_dicts=val_loader_dicts,
+        val_loader_periodicals=val_loader_periodicals,
         epochs=args.max_epochs,
         lr=args.lr,
         save_path=args.save,

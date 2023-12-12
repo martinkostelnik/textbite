@@ -45,7 +45,7 @@ class AnnotatedDocument:
 
     def map_to_pagexml(self, pagexml: PageLayout) -> None:
         for line in pagexml.lines_iterator():
-            if line.transcription.strip():
+            if line and line.transcription and line.transcription.strip():
                 self.map_line(line)
         self.regions = [region for region in self.regions if region.lines]
         
@@ -117,14 +117,18 @@ class AnnotatedDocument:
 
         for src, dst in self.relations.items():
             if len(dst) > 0:
-                logging.warning(f'There are multiple outgoing relations for {src}')
+                # logging.warning(f'There are multiple outgoing relations for {src}')
+                pass
 
             dst = dst[0]
             if src in translations and dst in translations:
                 true_src = translations[src]
                 true_dst = translations[dst]
 
-                regions_dict[true_src].lines.extend(regions_dict[true_dst].lines)
+                try:
+                    regions_dict[true_src].lines.extend(regions_dict[true_dst].lines)
+                except KeyError:
+                    continue
                 translations[true_dst] = true_src
 
                 del regions_dict[true_dst]
@@ -158,9 +162,13 @@ class LabelStudioExport:
             filename = urllib.parse.unquote(partition[2])
             
             document_type = partition[0].rpartition("/")[2]
+            document_type = document_type.partition("-")[0]
             document_type = DocumentType(document_type)
 
-            regions, relations = self.parse_annotated_regions(annotated_regions)
+            try:
+                regions, relations = self.parse_annotated_regions(annotated_regions)
+            except ValueError:
+                continue
 
             document = AnnotatedDocument(
                 id=id,
@@ -175,8 +183,8 @@ class LabelStudioExport:
 
     def parse_annotated_regions(self, annotated_regions: List[dict]) -> Tuple[List[AnnotatedRegion], Dict[str, List[str]]]:
         if len(annotated_regions) > 1:
-            exit()
-            # TODO: Skipped annotations?
+            logging.warning(f"Multiple annotations detected")
+            raise ValueError
 
         _annotated_regions = annotated_regions[0]["result"]
 

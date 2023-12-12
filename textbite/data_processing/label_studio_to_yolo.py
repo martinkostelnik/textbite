@@ -13,6 +13,7 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--json", required=True, type=str, help="Path to an exported JSON file from label-studio.")
     parser.add_argument('--xml', required=True, type=str, help="Path to a folder containing XML files from PERO-OCR.")
     parser.add_argument("--save", required=True, type=str, help="Path to a folder where results will be saved.")

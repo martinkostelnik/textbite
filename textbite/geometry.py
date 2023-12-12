@@ -275,9 +275,9 @@ class LineGeometry:
         horizontal_visible_lines = find_visible_lines(horizontal_rays, other_lines)
         self.visible_lines.extend(horizontal_visible_lines)
         for l in horizontal_visible_lines:
-            if l.child and l.child not in self.visible_lines:
+            if l.child and l.child not in self.visible_lines and self is not l.child:
                 self.visible_lines.append(l.child)
-            if l.parent and l.parent not in self.visible_lines:
+            if l.parent and l.parent not in self.visible_lines and self is not l.parent:
                 self.visible_lines.append(l.parent)
 
         self.visible_lines = list(set(self.visible_lines))
@@ -389,7 +389,7 @@ class PageGeometry:
         if path:
             self.pagexml = PageLayout(file=path)
 
-        self.lines: List[LineGeometry] = [LineGeometry(line, self) for line in self.pagexml.lines_iterator()]
+        self.lines: List[LineGeometry] = [LineGeometry(line, self) for line in self.pagexml.lines_iterator() if line.transcription and line.transcription.strip()]
         for line in self.lines:
             line.set_parent(self.lines)
             line.set_child(self.lines)
