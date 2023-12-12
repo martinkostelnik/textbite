@@ -11,15 +11,18 @@ from textbite.embedding import LineEmbedding
 
 
 class Graph:
-    def __init__(self, geometry, node_embeddings_dict):
+    def __init__(self, graph_id, geometry, node_embeddings_dict):
+        self.graph_id = graph_id
         node_features = []
         labels = []
+        line_ids = []
 
         from_indices = []
         to_indices = []
         for line_idx, line in enumerate(geometry.lines):
             embedding = node_embeddings_dict[line.text_line.id].embedding
             node_features.append(embedding)
+            line_ids.append(line.text_line.id)
 
             line_bite_id = node_embeddings_dict[line.text_line.id].bite_id
             connected_lines = line.neighbourhood + line.visible_lines
@@ -32,6 +35,7 @@ class Graph:
                 labels.append(int(line_bite_id == connected_line_bite_id))
 
         self.node_features = torch.stack(node_features)  # Shape (n_nodes, n_features)
+        self.line_ids = line_ids  # List of strings, (n_nodes, )
         self.edge_index = torch.tensor([from_indices, to_indices])  # Shape (2, n_edges)
         self.edge_attr = torch.tensor([])  # Shape (n_edges, n_features), but we have none
         self.labels = torch.tensor(labels)  # Shape (1, n_edges)
@@ -39,6 +43,7 @@ class Graph:
     def __str__(self):
         result_str = ""
 
+        result_str += f"Graph ID: {self.graph_id}\n"
         result_str += f"Node features shape: {self.node_features.shape}\n"
         result_str += f"Edge index shape:    {self.edge_index.shape}\n"
         result_str += f"Edge attr shape:     {self.edge_attr.shape}\n"
@@ -79,7 +84,7 @@ def main():
         geometry.set_neighbourhoods()
         geometry.set_visibility()
 
-        graphs.append(Graph(geometry, node_embeddings_dict))
+        graphs.append(Graph(geometry.pagexml.id, geometry, node_embeddings_dict))
         logging.info(f"Processed: {xml_path}")
 
     save_path = os.path.join(args.save, "graphs.pkl")
