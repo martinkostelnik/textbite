@@ -133,13 +133,12 @@ def train(
             if (graph_i + 1) % report_interval == 0:
                 t_diff = time.time() - t0
                 print(f"After {graph_i+1} graphs: avg time {1000.0*t_diff/report_interval:.1f}ms, avg loss {running_loss/report_interval:.4f}")
-                print(f"Acc = {100.0*acc/50}")
-                accs.append(100.0*acc.cpu().item()/50)
+                print(f"Acc = {100.0*acc/report_interval:.2f}")
+                accs.append(100.0*acc.cpu().item()/report_interval)
                 losses.append(running_loss/report_interval)
                 running_loss = 0.0
                 acc = 0.0
                 t0 = time.time()
-                
 
                 # evaluate(model, val_data_book, device, criterion, "book")
                 # evaluate(model, val_data_dict, device, criterion, "dictionary")
@@ -201,6 +200,7 @@ def main():
     logging.info("Creating normalizer ...")
     normalizer = NodeNormalizer(train_graphs)
     logging.info("Saving normalizer ...")
+    os.makedirs(args.save, exist_ok=True)
     with open(os.path.join(args.save, "normalizer.pkl"), 'wb') as f:
         pickle.dump(normalizer, f)
     logging.info("Normalizer created and saved.")
