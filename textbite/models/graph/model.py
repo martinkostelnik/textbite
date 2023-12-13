@@ -16,11 +16,13 @@ class Block(torch.nn.Module):
     ):
         super().__init__()
         self.gcn = GCNConv(width, width)
+        self.norm = nn.LayerNorm(width)
         self.nonlin = nn.ReLU()
         self.dropout = nn.Dropout(dropout_prob)
 
     def forward(self, x, edge_index):
         x = self.gcn(x, edge_index)
+        x = self.norm(x)
         x = self.nonlin(x)
         x = self.dropout(x)
 
