@@ -14,6 +14,7 @@ from safe_gpu import safe_gpu
 
 from textbite.models.graph.model import GraphModel, NodeNormalizer
 from textbite.models.graph.create_graphs import Graph  # needed for unpickling
+from textbite.models.graph.create_graphs import collate_custom_graphs
 from textbite.utils import FILENAMES_EXCLUDED_FROM_TRAINING, VALIDATION_FILENAMES_BOOK, VALIDATION_FILENAMES_DICTIONARY, VALIDATION_FILENAMES_PERIODICAL
 
 
@@ -30,6 +31,7 @@ def parse_arguments():
     parser.add_argument("-d", "--dropout", type=float, default=0.1, help="Dropout probability in the model.")
 
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--batch-size", type=int, default=16, help="Batch size")
 
     parser.add_argument("--report-interval", type=int, default=10, help="After how many updates to report")
     parser.add_argument("--save", type=str, help="Where to save the model best by validation F1")
@@ -51,7 +53,7 @@ def load_data(path: str) -> Tuple[List[Graph], List[Graph], List[Graph], List[Gr
 
     end = time.perf_counter()
     logging.info(f"Train graphs: {len(train_data)} | Val graphs book: {len(val_data_book)} | Val graphs dictionary: {len(val_data_dict)} | Val graphs periodical: {len(val_data_peri)} | Took: {(end-start):.3f} s")
-    
+
     return train_data, val_data_book, val_data_dict, val_data_peri
 
 
@@ -100,6 +102,7 @@ def train(
         val_data_peri,
         report_interval: int,
         lr: float,
+        batch_size: int,
         save_path: str,
         checkpoint_dir: str,
 ):
@@ -114,8 +117,20 @@ def train(
     running_loss = 0.0
     t0 = time.time()
     acc = 0.0
+
+    batch = []
+    batch_id = 0
+
     try:
         for graph_i, graph in enumerate(itertools.cycle(train_data)):
+            batch.append(graph)
+            if len(batch) < batch_size:
+                continue
+
+            graph = collate_custom_graphs(batch)
+            batch = []
+            batch_id += 1
+
             node_features = graph.node_features.to(device)
             edge_indices = graph.edge_index.to(device)
             labels = graph.labels.to(device, dtype=torch.float32)
@@ -123,7 +138,7 @@ def train(
             outputs = model(node_features, edge_indices)
             similarities = get_similarities(outputs, edge_indices)
             train_loss = criterion(similarities, labels)
-            acc += per_edge_accuracy(similarities, labels)
+            acc += per_edge_accuracy(similarities, labels)  # Note that this is distorted now, weight of graphs depends on who they meet in a batch
 
             optim.zero_grad()
             train_loss.backward()
@@ -131,10 +146,9 @@ def train(
             optim.step()
             running_loss += train_loss.cpu().item()
 
-            if (graph_i + 1) % report_interval == 0:
+            if batch_id % report_interval == 0:
                 t_diff = time.time() - t0
-                print(f"After {graph_i+1} graphs: avg time {1000.0*t_diff/report_interval:.1f}ms, avg loss {running_loss/report_interval:.4f}")
-                print(f"Acc = {100.0*acc/report_interval:.2f}")
+                print(f"After {batch_id} Batches ({batch_id*batch_size} Graphs): time {1000.0*t_diff/(report_interval):.1f}ms /B ({1000.0*t_diff/(report_interval*batch_size):.1f}ms /G), loss {running_loss/(report_interval):.4f} /B {running_loss/(report_interval*batch_size):.4f} /G, acc {100.0*acc/(report_interval):.2f} %")
                 accs.append(100.0*acc.cpu().item()/report_interval)
                 losses.append(running_loss/report_interval)
                 running_loss = 0.0
@@ -241,6 +255,7 @@ def main():
         val_data_peri=val_graphs_peri,
         report_interval=args.report_interval,
         lr=args.lr,
+        batch_size=args.batch_size,
         save_path=args.save,
         checkpoint_dir=args.checkpoint_dir,
     )

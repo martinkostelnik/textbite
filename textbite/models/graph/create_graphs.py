@@ -1,5 +1,6 @@
 import sys
 import argparse
+import copy
 import logging
 import os
 import pickle
@@ -81,6 +82,26 @@ class Graph:
         result_str += f"Labels ({len(self.labels)}): {self.labels}\n"
 
         return result_str
+
+
+def collate_custom_graphs(graphs):
+    multi_graph = copy.deepcopy(graphs[0])
+
+    multi_graph.id = None  # We don't guarantee this makes any sense
+    multi_graph.node_features = torch.concatenate([g.node_features for g in graphs])  # Shape (n_nodes, n_features)
+    multi_graph.line_ids = None  # We don't guarantee this makes any sense
+
+    adjusted_edges_index = []
+    offset = 0
+    for g in graphs:
+        adjusted_edges_index.append(g.edge_index + offset)
+        offset += len(g.node_features)
+    multi_graph.edge_index = torch.concatenate(adjusted_edges_index, dim=1)  # Shape (2, n_edges)
+
+    multi_graph.edge_attr = torch.tensor([])  # Shape (n_edges, n_features), but we have none
+    multi_graph.labels = torch.concatenate([g.labels for g in graphs])  # Shape (1, n_edges)
+
+    return multi_graph
 
 
 def parse_arguments():
