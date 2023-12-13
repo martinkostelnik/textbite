@@ -58,7 +58,8 @@ def load_data(path: str) -> Tuple[List[Graph], List[Graph], List[Graph], List[Gr
 def get_similarities(node_features, edge_indices):
     lhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[0, :])
     rhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[1, :])
-    similarities = torch.sum(lhs_nodes * rhs_nodes, dim=1)
+    fea_dim = lhs_nodes.shape[1]
+    similarities = torch.sum(lhs_nodes * rhs_nodes / fea_dim, dim=1)
 
     return similarities
 
@@ -194,7 +195,7 @@ def main():
 
     logging.info("Loading data ...")
     train_graphs, val_graphs_book, val_graphs_dict, val_graphs_peri = load_data(args.data)
-    train_graphs = train_graphs[:50]
+    # train_graphs = train_graphs[:50]
     logging.info(f"Data loaded.")
 
     logging.info("Creating normalizer ...")
