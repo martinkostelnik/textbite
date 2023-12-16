@@ -33,6 +33,18 @@ class AnnotatedRegion:
     lines: List[TextLine] = field(default_factory=list)
 
 
+def best_intersecting_bbox(target_bbox, candidate_bboxes):
+    best_region = None
+    best_intersection = 0.0
+    for i, bbox in enumerate(candidate_bboxes):
+        intersection = bbox_intersection(target_bbox, bbox)
+        if intersection > best_intersection:
+            best_intersection = intersection
+            best_region = i
+
+    return best_region
+
+
 @dataclass
 class AnnotatedDocument:
     id: int
@@ -48,7 +60,7 @@ class AnnotatedDocument:
             if line and line.transcription and line.transcription.strip():
                 self.map_line(line)
         self.regions = [region for region in self.regions if region.lines]
-        
+
         h, w = pagexml.page_size
         self.width = w
         self.height = h
@@ -56,15 +68,9 @@ class AnnotatedDocument:
     def map_line(self, line: TextLine) -> None:
         line_bbox = polygon_to_bbox(line.polygon)
 
-        best_region = None
-        best_intersection = 0.0
-        for region in self.regions:
-            intersection = bbox_intersection(line_bbox, region.bbox)
-            if intersection > best_intersection:
-                best_intersection = intersection
-                best_region = region
-
-        if best_region:
+        best_region_idx = best_intersecting_bbox(line_bbox, [r.bbox for r in self.regions])
+        if best_region_idx:
+            best_region = self.regions[best_region_idx]
             best_region.lines.append(line)
 
     def to_json(self) -> List[List[str]]:
@@ -72,7 +78,7 @@ class AnnotatedDocument:
 
     def get_json_str(self, indent: Optional[int]=None) -> str:
         return json.dumps(self.to_json(), indent=indent)
-    
+
     def to_yolo(self) -> List[Tuple[int, float, float, float, float]]:
         yolos = []
 
@@ -83,11 +89,11 @@ class AnnotatedDocument:
             max_x = max(bboxes, key=lambda x: x.xmax).xmax
             max_y = max(bboxes, key=lambda x: x.ymax).ymax
             bbox = AABB(min_x, min_y, max_x, max_y)
-            
+
             match region.label:
                 case RegionType.TITLE:
                     label = 3
-                
+
                 case RegionType.TEXT:
                     label = 0
                     first = min(bboxes, key=lambda x: x.ymin)
@@ -98,7 +104,7 @@ class AnnotatedDocument:
 
                 case _:
                     continue
-                
+
             yolos.append((label,) + bbox_to_yolo(bbox, self.width, self.height))
 
         return yolos
@@ -109,8 +115,8 @@ class AnnotatedDocument:
         for label, x, y, w, h in self.to_yolo():
             yolo_str += f"{label} {x} {y} {w} {h}\n"
 
-        return yolo_str 
-    
+        return yolo_str
+
     def merge_regions(self):
         translations = {r.id: r.id for r in self.regions}
         regions_dict = {r.id: r for r in self.regions}
@@ -160,7 +166,7 @@ class LabelStudioExport:
 
             partition = pth.rpartition("/")
             filename = urllib.parse.unquote(partition[2])
-            
+
             document_type = partition[0].rpartition("/")[2]
             document_type = document_type.partition("-")[0]
             document_type = DocumentType(document_type)
@@ -196,11 +202,11 @@ class LabelStudioExport:
         return regions_parsed, relations_parsed
 
     def parse_relations(self, relations: List[dict]) -> Dict[str, List[str]]:
-        relations_dict = {relation["from_id"]: [] for relation in relations }
+        relations_dict = {relation["from_id"]: [] for relation in relations}
         for relation in relations:
             relations_dict[relation["from_id"]].append(relation["to_id"])
         return relations_dict
-    
+
     def parse_regions(self, regions: List[dict]) -> List[AnnotatedRegion]:
         result = []
         for region in regions:
@@ -212,7 +218,6 @@ class LabelStudioExport:
             result.append(region_parsed)
 
         return result
-    
 
     def get_bbox(annotation: dict, page_width: int, page_height: int) -> AABB:
         xmin = (annotation["x"] / 100.0) * page_width
