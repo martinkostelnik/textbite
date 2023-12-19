@@ -137,7 +137,7 @@ def parse_arguments():
 
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--xml", required=True, type=str, help="Path to a folder with xmls.")
-    parser.add_argument("--tokenizer" type=str, help="Path to tokenizer.")
+    parser.add_argument("--tokenizer", type=str, help="Path to tokenizer.")
     parser.add_argument("--bert", required=True, type=str, help="Path to a bert model")
     parser.add_argument("--yolo", required=True, type=str, help="Path to YOLO model")
     parser.add_argument("--embeddings", required=True, type=str, help="Path to a pickle file with LineGeometry embeddings")
