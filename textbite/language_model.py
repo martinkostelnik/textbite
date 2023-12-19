@@ -9,17 +9,26 @@ from semant.language_modelling.tokenizer import build_tokenizer
 from textbite.utils import CZERT_PATH
 
 
-def create_language_model(device, path: str=CZERT_PATH) -> Tuple[BertTokenizerFast, BertModel]:
+def create_language_model(device, path: str=CZERT_PATH, tokenizer_path: str=None) -> Tuple[BertTokenizerFast, BertModel]:
     if not path or path == CZERT_PATH:
         tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
         bert = BertModel.from_pretrained(CZERT_PATH)
     else:
         checkpoint = torch.load(path)
-        tokenizer = build_tokenizer(
-            seq_len=checkpoint["seq_len"],
-            fixed_sep=checkpoint["fixed_sep"],
-            masking_prob=0.0,
-        )
+
+        if tokenizer_path:
+            tokenizer = build_tokenizer(
+                path=tokenizer_path,
+                seq_len=checkpoint["seq_len"],
+                fixed_sep=checkpoint["fixed_sep"],
+                masking_prob=0.0,
+            )
+        else:
+            tokenizer = build_tokenizer(
+                seq_len=checkpoint["seq_len"],
+                fixed_sep=checkpoint["fixed_sep"],
+                masking_prob=0.0,
+            )
 
         bert = build_model(
             czert=checkpoint["czert"],
