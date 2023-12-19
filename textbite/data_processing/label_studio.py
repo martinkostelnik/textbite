@@ -54,6 +54,7 @@ class AnnotatedDocument:
     relations: Dict[str, List[str]]
     width: float
     height: float
+    mapped_to_pagexml: bool=False
 
     def map_to_pagexml(self, pagexml: PageLayout) -> None:
         for line in pagexml.lines_iterator():
@@ -64,6 +65,8 @@ class AnnotatedDocument:
         h, w = pagexml.page_size
         self.width = w
         self.height = h
+
+        self.map_to_pagexml = True
 
     def map_line(self, line: TextLine) -> None:
         line_bbox = polygon_to_bbox(line.polygon)
@@ -82,6 +85,22 @@ class AnnotatedDocument:
     def to_yolo(self) -> List[Tuple[int, float, float, float, float]]:
         yolos = []
 
+        if not self.mapped_to_pagexml:
+            for region in self.regions:
+                match region.label:
+                    case RegionType.TITLE:
+                        label = 0
+
+                    case RegionType.TEXT:
+                        label = 1
+
+                    case _:
+                        continue
+
+                yolos.append((label,) + bbox_to_yolo(region.bbox, self.width, self.height))
+            
+            return yolos
+    
         for region in self.regions:
             bboxes = [polygon_to_bbox(line.polygon) for line in region.lines]
             min_x = min(bboxes, key=lambda x: x.xmin).xmin

@@ -48,10 +48,10 @@ class GraphModel(torch.nn.Module):
         self.dropout_prob = dropout_prob
 
         self.in_proj = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.out_proj = torch.nn.Linear(self.hidden_size, self.output_size)
         self.blocks = nn.ModuleList()
         for _ in range(n_layers):
             self.blocks.append(Block(self.hidden_size, dropout_prob))
+        self.out_proj = torch.nn.Linear(self.hidden_size, self.output_size)
 
         # self.layers = nn.ModuleList()
         # if n_layers == 1:

@@ -155,10 +155,10 @@ def train(
                 acc = 0.0
                 t0 = time.time()
 
-                # evaluate(model, val_data_book, device, criterion, "book")
-                # evaluate(model, val_data_dict, device, criterion, "dictionary")
-                # evaluate(model, val_data_peri, device, criterion, "periodical")
-                # print()
+                evaluate(model, val_data_book, device, criterion, "book")
+                evaluate(model, val_data_dict, device, criterion, "dictionary")
+                evaluate(model, val_data_peri, device, criterion, "periodical")
+                print()
 
                 if checkpoint_dir:
                     dict_for_saving = {

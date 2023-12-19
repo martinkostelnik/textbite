@@ -51,7 +51,7 @@ def get_args():
     parser.add_argument("--data", required=True, type=str, help="Path to a folder with xml data.")
     parser.add_argument("--images", type=str, help="Path to a folder with images data. Used for extra visualizations.")
     parser.add_argument("--diagnostics", type=str, help="Path to a folder where to place diagnostic images. IGNORED")
-    parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weigts of YOLO model.")
+    parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weights of YOLO model.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
 
     return parser.parse_args()

@@ -17,6 +17,7 @@ def parse_arguments():
     parser.add_argument("--json", required=True, type=str, help="Path to an exported JSON file from label-studio.")
     parser.add_argument('--xml', required=True, type=str, help="Path to a folder containing XML files from PERO-OCR.")
     parser.add_argument("--save", required=True, type=str, help="Path to a folder where results will be saved.")
+    parser.add_argument("--raw", action="store_true", help="Raw regions as they come from label studio.")
 
     args = parser.parse_args()
     return args
@@ -39,7 +40,8 @@ def main():
             logging.warning(f"XML file {path_xml} not found. SKIPPING")
             continue
 
-        annotated_document.map_to_pagexml(pagexml)
+        if not args.raw:
+            annotated_document.map_to_pagexml(pagexml)
         
         result_str = annotated_document.get_yolo_str()
 
