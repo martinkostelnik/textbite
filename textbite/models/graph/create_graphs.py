@@ -194,7 +194,7 @@ def main():
     safe_gpu.claim_gpus()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tokenizer, bert = create_language_model(device, args.bert)
+    tokenizer, bert = create_language_model(device, args.bert, args.tokenizer)
     bert = bert.to(device)
     bert.eval()
 
