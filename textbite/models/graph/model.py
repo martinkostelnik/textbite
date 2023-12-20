@@ -2,7 +2,6 @@ from typing import List
 
 import torch
 from torch import nn
-import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 
 from textbite.models.graph.create_graphs import Graph
@@ -62,6 +61,7 @@ class GraphModel(torch.nn.Module):
 
         return x
 
+
     @property
     def dict_for_saving(self):
         dict_for_saving = {
@@ -90,6 +90,15 @@ def load_gcn(fn, device):
     model.to(device)
 
     return model
+
+
+def get_similarities(node_features, edge_indices):
+    lhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[0, :])
+    rhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[1, :])
+    fea_dim = lhs_nodes.shape[1]
+    similarities = torch.sum(lhs_nodes * rhs_nodes / fea_dim, dim=1)
+
+    return similarities
 
 
 class NodeNormalizer:

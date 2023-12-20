@@ -12,7 +12,7 @@ import torch
 
 from safe_gpu import safe_gpu
 
-from textbite.models.graph.model import GraphModel, NodeNormalizer
+from textbite.models.graph.model import GraphModel, NodeNormalizer, get_similarities
 from textbite.models.graph.create_graphs import Graph  # needed for unpickling
 from textbite.models.graph.create_graphs import collate_custom_graphs
 from textbite.utils import FILENAMES_EXCLUDED_FROM_TRAINING, VALIDATION_FILENAMES_BOOK, VALIDATION_FILENAMES_DICTIONARY, VALIDATION_FILENAMES_PERIODICAL
@@ -55,15 +55,6 @@ def load_data(path: str) -> Tuple[List[Graph], List[Graph], List[Graph], List[Gr
     logging.info(f"Train graphs: {len(train_data)} | Val graphs book: {len(val_data_book)} | Val graphs dictionary: {len(val_data_dict)} | Val graphs periodical: {len(val_data_peri)} | Took: {(end-start):.3f} s")
 
     return train_data, val_data_book, val_data_dict, val_data_peri
-
-
-def get_similarities(node_features, edge_indices):
-    lhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[0, :])
-    rhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[1, :])
-    fea_dim = lhs_nodes.shape[1]
-    similarities = torch.sum(lhs_nodes * rhs_nodes / fea_dim, dim=1)
-
-    return similarities
 
 
 # TODO: DET or similar will be super useful, it's all terribly mis-calibrated so far
