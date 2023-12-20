@@ -124,7 +124,7 @@ def collate_custom_graphs(graphs):
         offset += len(g.node_features)
     multi_graph.edge_index = torch.concatenate(adjusted_edges_index, dim=1)  # Shape (2, n_edges)
 
-    multi_graph.edge_attr = torch.tensor([])  # Shape (n_edges, n_features), but we have none
+    multi_graph.edge_attr = torch.concatenate([g.edge_attr for g in graphs])  # Shape (n_edges, n_features), but we have none
     multi_graph.labels = torch.concatenate([g.labels for g in graphs])  # Shape (1, n_edges)
 
     return multi_graph
