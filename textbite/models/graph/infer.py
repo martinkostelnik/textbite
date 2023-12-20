@@ -8,8 +8,7 @@ import torch
 
 from safe_gpu import safe_gpu
 
-from textbite.models.graph.dataset import GraphDataset
-from textbite.models.graph.model import GraphModel, NodeNormalizer
+from textbite.models.graph.model import load_gcn
 from textbite.models.graph.create_graphs import Graph  # needed for unpickling
 
 from textbite.models.graph.train import evaluate
@@ -48,28 +47,10 @@ def main():
             normalizer = pickle.load(f)
         normalizer.normalize_graphs(data)
 
-    model_checkpoint = torch.load(args.model, map_location=device)
-    model = GraphModel(
-        device=device,
-        hidden_size=model_checkpoint["hidden_size"],
-        input_size=model_checkpoint["input_size"],
-        output_size=model_checkpoint["output_size"],
-    )
-    model.load_state_dict(model_checkpoint["state_dict"])
-    model.to(device)
+    model = load_gcn(args.model, device)
     model.eval()
 
     logging.info(f'There are {len(data)} graphs')
-
-    # Model
-    logging.info("Creating model ...")
-    model = GraphModel(
-        input_size=97,
-        output_size=10,
-        device=device,
-    )
-    model = model.to(device)
-    logging.info("Model created.")
 
     logging.info("Evaluating...")
 

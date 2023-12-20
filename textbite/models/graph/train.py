@@ -149,7 +149,7 @@ def train(
             if batch_id % report_interval == 0:
                 t_diff = time.time() - t0
                 print(f"After {batch_id} Batches ({batch_id*batch_size} Graphs): time {1000.0*t_diff/(report_interval):.1f}ms /B ({1000.0*t_diff/(report_interval*batch_size):.1f}ms /G), loss {running_loss/(report_interval):.4f} /B {running_loss/(report_interval*batch_size):.4f} /G, acc {100.0*acc/(report_interval):.2f} %")
-                accs.append(100.0*acc.cpu().item()/report_interval)
+                accs.append(100.0 * acc.cpu().item()/report_interval)
                 losses.append(running_loss/report_interval)
                 running_loss = 0.0
                 acc = 0.0
@@ -161,14 +161,7 @@ def train(
                 print()
 
                 if checkpoint_dir:
-                    dict_for_saving = {
-                        "state_dict": model.state_dict(),
-                        "hidden_size": model.hidden_size,
-                        "input_size": model.input_size,
-                        "output_size": model.output_size,
-                    }
-
-                    torch.save(dict_for_saving, os.path.join(checkpoint_dir, f"{model.__class__.__name__}-checkpoint.{graph_i}.pth"))
+                    torch.save(model.dict_for_saving, os.path.join(checkpoint_dir, f"{model.__class__.__name__}-checkpoint.{graph_i}.pth"))
 
             # if f1_val > best_f1_val:
             #     best_f1_val = f1_val
