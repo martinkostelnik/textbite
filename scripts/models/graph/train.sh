@@ -14,10 +14,11 @@ DATA_PATH=$BASE/data/segmentation/graphs-all.pkl
 python -u $SCRIPTS_DIR/train.py \
     --data $DATA_PATH \
     -l 3 \
-    -n 97 \
-    -o 10 \
+    -n 64 \
+    -o 64 \
     -d 0.0 \
-    --lr 3e-3 \
-    --report-interval 50 \
+    --lr 1e-2 \
+    --batch-size 64 \
+    --report-interval 100 \
     --save $BASE/models \
     --checkpoint-dir $BASE/models
