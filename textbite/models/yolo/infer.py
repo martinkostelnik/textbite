@@ -78,9 +78,6 @@ def main():
         with open(out_path, "w") as f:
             json.dump(result, f, indent=4)
 
-        with open(out_path, "w") as f:
-            json.dump(result, f, indent=4)
-
 
 if __name__ == '__main__':
     main()

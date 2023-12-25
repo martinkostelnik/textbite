@@ -42,8 +42,8 @@ def parse_arguments():
 
 
 class EmbeddingProvider:
-    def __init__(self, device, bert_path: str=CZERT_PATH):
-        self.tokenizer, self.bert = create_language_model(device, bert_path)
+    def __init__(self, device, bert_path: str=CZERT_PATH, tokenizer_path: str=CZERT_PATH):
+        self.tokenizer, self.bert = create_language_model(device, bert_path, tokenizer_path)
         self.bert = self.bert.to(device)
         self.bert.eval()
         self.device = device

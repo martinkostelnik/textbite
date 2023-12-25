@@ -13,6 +13,7 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--json", required=True, type=str, help="Path to an exported JSON file from label-studio.")
     parser.add_argument('--xml', required=True, type=str, help="Path to a folder containing XML files from PERO-OCR.")
     parser.add_argument("--ignore-relations", action="store_true", help="If set, regions which further continue elsewhere will still be terminal")
@@ -42,7 +43,6 @@ def main():
             continue
 
         annotated_document.map_to_pagexml(pagexml)
-        a = len(annotated_document.regions)
 
         if not args.ignore_relations:
             annotated_document.merge_regions()

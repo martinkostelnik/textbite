@@ -72,7 +72,7 @@ class AnnotatedDocument:
         line_bbox = polygon_to_bbox(line.polygon)
 
         best_region_idx = best_intersecting_bbox(line_bbox, [r.bbox for r in self.regions])
-        if best_region_idx:
+        if best_region_idx is not None:
             best_region = self.regions[best_region_idx]
             best_region.lines.append(line)
 
@@ -252,8 +252,17 @@ class LabelStudioExport:
 
 
 if __name__ == "__main__":
-    EXPORT_PATH = r"/home/martin/textbite/data/segmentation/export.json"
+    logging.basicConfig(level=logging.INFO, force=True)
+
+    EXPORT_PATH = r"/home/martin/textbite/data/segmentation/export-1828-12-12-2023.json"
+    PAGEXML_PATH = r"/home/martin/textbite/data/segmentation/xmls/val-book/nikola-suhaj-loupeznik-06.xml"
     with open(EXPORT_PATH, "r") as f:
         raw_data = json.load(f)
     export1 = LabelStudioExport(raw_data=raw_data)
-    # export2 = LabelStudioExport(path=EXPORT_PATH)
+
+    for doc in export1.documents:
+        if "nikola-suhaj-loupeznik-06" in doc.filename:
+            pagexml = PageLayout(file=PAGEXML_PATH)
+            doc.map_to_pagexml(pagexml)
+            # print([region.lines for region in doc.regions])
+            break
