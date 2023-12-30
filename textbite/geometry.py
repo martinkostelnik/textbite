@@ -40,6 +40,14 @@ def bbox_intersection(lhs: AABB, rhs: AABB) -> float:
     return dx * dy if dx >= 0.0 and dy >= 0.0 else 0.0
 
 
+def bbox_intersection_over_area(lhs: AABB, rhs: AABB) -> float:
+    intersection = bbox_intersection(lhs, rhs)
+    area = abs((lhs.xmax - lhs.xmin)) * abs((lhs.ymax - lhs.ymin))
+
+    assert intersection <= area
+    return intersection / area
+
+
 def bbox_intersection_x(lhs: AABB, rhs: AABB) -> float:
     dx = min(lhs.xmax, rhs.xmax) - max(lhs.xmin, rhs.xmin)
     return max(dx, 0.0)
