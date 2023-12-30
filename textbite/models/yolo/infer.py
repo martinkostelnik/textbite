@@ -28,7 +28,7 @@ def parse_arguments():
 
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--data", required=True, type=str, help="Path to a folder with xml data.")
-    parser.add_argument("--images", type=str, help="Path to a folder with images data.")
+    parser.add_argument("--images", required=True, type=str, help="Path to a folder with images data.")
     parser.add_argument("--altos", type=str, help="Path to a folder with alto data.")
     parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weights of YOLO model.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
@@ -89,7 +89,7 @@ class YoloBiter:
 
         return new_bboxes
     
-    def produce_bites(self, img_filename: str, xml_filename: str, alto_filename: str) -> Tuple[List[Bite], List[Bite]]:
+    def produce_bites(self, img_filename: str, xml_filename: str, alto_filename: Optional[str]=None) -> Tuple[List[Bite], List[Bite]]:
         texts, titles = self.find_bboxes(img_filename)
 
         texts = self.filter_bboxes(texts)
@@ -99,11 +99,12 @@ class YoloBiter:
         with open(xml_filename) as f:
             layout.from_pagexml(f)
 
-        alto_tree = ET.parse(alto_filename)
-        alto_root = alto_tree.getroot()
-        namespace = {"ns": "http://www.loc.gov/standards/alto/ns-v2#"}
-        alto_text_lines = alto_root.findall(".//ns:TextLine", namespace)
-        alto_text_lines_bboxes = [self.get_alto_bbox(atl) for atl in alto_text_lines]
+        if alto_filename:
+            alto_tree = ET.parse(alto_filename)
+            alto_root = alto_tree.getroot()
+            namespace = {"ns": "http://www.loc.gov/standards/alto/ns-v2#"}
+            alto_text_lines = alto_root.findall(".//ns:TextLine", namespace)
+            alto_text_lines_bboxes = [self.get_alto_bbox(atl) for atl in alto_text_lines]
 
         texts_dict = {idx: Bite(cls="text") for idx, _ in enumerate(texts)}
         titles_dict = {idx: Bite(cls="title") for idx, _ in enumerate(titles)}
@@ -114,11 +115,12 @@ class YoloBiter:
             if best_text_idx is None and best_title_idx is None:
                 continue
 
-            best_alto_idx = best_intersecting_bbox(line_bbox, alto_text_lines_bboxes)
-            alto_possible = best_alto_idx is not None
-            if alto_possible:
-                alto_text_line = alto_text_lines[best_alto_idx]
-                alto_words = alto_text_line.findall(".//ns:String", namespace)
+            if alto_filename:
+                best_alto_idx = best_intersecting_bbox(line_bbox, alto_text_lines_bboxes)
+                alto_possible = best_alto_idx is not None
+                if alto_possible:
+                    alto_text_line = alto_text_lines[best_alto_idx]
+                    alto_words = alto_text_line.findall(".//ns:String", namespace)
 
             best_text_ioa = 0.0 if best_text_idx is None else bbox_intersection_over_area(line_bbox, texts[best_text_idx])
             best_title_ioa = 0.0 if best_title_idx is None else bbox_intersection_over_area(line_bbox, titles[best_title_idx])
@@ -132,7 +134,7 @@ class YoloBiter:
                 continue
 
             texts_dict[best_text_idx].lines.append(line.id)
-            if alto_possible:
+            if alto_filename and alto_possible:
                 for word in alto_words:
                     xmin = float(word.get("HPOS"))
                     ymin = float(word.get("VPOS"))
@@ -170,7 +172,7 @@ def main():
     for filename in xml_filenames:
         path_xml = os.path.join(args.data, filename)
         path_img = os.path.join(args.images, filename.replace(".xml", ".jpg"))
-        path_alto = os.path.join(args.altos, filename)
+        path_alto = os.path.join(args.altos, filename) if args.altos else None
         logging.info(f"Processing: {path_xml}")
         result = biter.produce_bites(path_img, path_xml, path_alto)
 
