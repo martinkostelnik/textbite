@@ -15,7 +15,6 @@ from textbite.data_processing.label_studio import best_intersecting_bbox
 from textbite.geometry import AABB, polygon_to_bbox, bbox_intersection_over_area
 
 
-
 @dataclass
 class Bite:
     cls: str
@@ -34,7 +33,7 @@ def parse_arguments():
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
 
     return parser.parse_args()
-    
+
 
 class YoloBiter:
     def __init__(self, model):
@@ -62,10 +61,10 @@ class YoloBiter:
             titles.append(AABB(*title.xyxy[0].cpu().numpy().tolist()))
 
         return texts, titles
-    
+
     def is_contained(self, lhs: AABB, rhs: AABB, threshold: float=0.9) -> bool:
         return bbox_intersection_over_area(lhs, rhs) >= threshold
-    
+
     def get_alto_bbox(self, alto_line) -> AABB:
         xmin = float(alto_line.get("HPOS"))
         ymin = float(alto_line.get("VPOS"))
@@ -73,7 +72,7 @@ class YoloBiter:
         ymax = ymin + float(alto_line.get("HEIGHT"))
 
         return AABB(xmin, ymin, xmax, ymax)
-    
+
     def filter_bboxes(self, bboxes: List[AABB]) -> List[AABB]:
         new_bboxes = []
 
@@ -88,7 +87,7 @@ class YoloBiter:
                 new_bboxes.append(box1)
 
         return new_bboxes
-    
+
     def produce_bites(self, img_filename: str, xml_filename: str, alto_filename: Optional[str]=None) -> Tuple[List[Bite], List[Bite]]:
         texts, titles = self.find_bboxes(img_filename)
 
@@ -155,8 +154,8 @@ class YoloBiter:
 
 
 def save_result(result: List[Bite], path: str) -> None:
-        with open(path, "w") as f:
-            json.dump([bite.__dict__ for bite in result], f, indent=4, ensure_ascii=False)
+    with open(path, "w") as f:
+        json.dump([bite.__dict__ for bite in result], f, indent=4, ensure_ascii=False)
 
 
 def main():
