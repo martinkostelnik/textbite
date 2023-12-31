@@ -14,6 +14,8 @@ from ultralytics import YOLO
 from textbite.data_processing.label_studio import best_intersecting_bbox
 from textbite.geometry import AABB, polygon_to_bbox, bbox_intersection_over_area
 
+from textbite.models.improve_pagexml import process
+
 
 @dataclass
 class Bite:
@@ -29,6 +31,7 @@ def parse_arguments():
     parser.add_argument("--data", required=True, type=str, help="Path to a folder with xml data.")
     parser.add_argument("--images", required=True, type=str, help="Path to a folder with images data.")
     parser.add_argument("--altos", type=str, help="Path to a folder with alto data.")
+    parser.add_argument("--xml-output", type=str, help="Where to put reorganized PAGE XMLs.")
     parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weights of YOLO model.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
 
@@ -173,10 +176,19 @@ def main():
         path_img = os.path.join(args.images, filename.replace(".xml", ".jpg"))
         path_alto = os.path.join(args.altos, filename) if args.altos else None
         logging.info(f"Processing: {path_xml}")
-        result = biter.produce_bites(path_img, path_xml, path_alto)
+        bites = biter.produce_bites(path_img, path_xml, path_alto)
 
         out_path = os.path.join(args.save, filename.replace(".xml", ".json"))
-        save_result(result, out_path)
+        save_result(bites, out_path)
+
+        layout = PageLayout()
+        with open(path_xml) as f:
+            layout.from_pagexml(f)
+
+        out_xml_string = process(layout, bites)
+        out_path = os.path.join(args.save, filename)
+        with open(out_path, 'w', encoding='utf-8') as out_f:
+            out_f.write(out_xml_string)
 
 
 if __name__ == '__main__':
