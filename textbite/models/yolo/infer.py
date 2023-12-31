@@ -14,7 +14,7 @@ from ultralytics import YOLO
 from textbite.data_processing.label_studio import best_intersecting_bbox
 from textbite.geometry import AABB, polygon_to_bbox, bbox_intersection_over_area
 
-from textbite.models.improve_pagexml import process, UnsupportedLayoutError
+from textbite.models.improve_pagexml import PageXMLEnhancer, UnsupportedLayoutError
 
 
 @dataclass
@@ -91,15 +91,11 @@ class YoloBiter:
 
         return new_bboxes
 
-    def produce_bites(self, img_filename: str, xml_filename: str, alto_filename: Optional[str]=None) -> Tuple[List[Bite], List[Bite]]:
+    def produce_bites(self, img_filename: str, layout: PageLayout, alto_filename: Optional[str]=None) -> Tuple[List[Bite], List[Bite]]:
         texts, titles = self.find_bboxes(img_filename)
 
         texts = self.filter_bboxes(texts)
         titles = self.filter_bboxes(titles)
-
-        layout = PageLayout()
-        with open(xml_filename) as f:
-            layout.from_pagexml(f)
 
         if alto_filename:
             alto_tree = ET.parse(alto_filename)
@@ -167,26 +163,28 @@ def main():
     logging.getLogger("ultralytics").setLevel(logging.WARNING)
 
     biter = YoloBiter(YOLO(args.model))
+    xml_enhancer = PageXMLEnhancer()
 
     os.makedirs(args.save, exist_ok=True)
     xml_filenames = [xml_filename for xml_filename in os.listdir(args.data) if xml_filename.endswith(".xml")]
 
     for filename in xml_filenames:
         path_xml = os.path.join(args.data, filename)
+        layout = PageLayout()
+        with open(path_xml) as f:
+            layout.from_pagexml(f)
+        xml_enhancer.ensure_unique_line_ids(layout)
+
         path_img = os.path.join(args.images, filename.replace(".xml", ".jpg"))
         path_alto = os.path.join(args.altos, filename) if args.altos else None
         logging.info(f"Processing: {path_xml}")
-        bites = biter.produce_bites(path_img, path_xml, path_alto)
+        bites = biter.produce_bites(path_img, layout, path_alto)
 
         out_path = os.path.join(args.save, filename.replace(".xml", ".json"))
         save_result(bites, out_path)
 
-        layout = PageLayout()
-        with open(path_xml) as f:
-            layout.from_pagexml(f)
-
         try:
-            out_xml_string = process(layout, bites)
+            out_xml_string = xml_enhancer.process(layout, bites)
             out_path = os.path.join(args.save, filename)
             with open(out_path, 'w', encoding='utf-8') as out_f:
                 out_f.write(out_xml_string)
