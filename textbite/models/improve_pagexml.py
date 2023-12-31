@@ -1,5 +1,13 @@
 import numpy as np
 import lxml.etree as ET
+from collections import defaultdict
+
+from textbite.geometry import polygon_to_bbox
+from pero_ocr.document_ocr.layout import RegionLayout
+
+
+class UnsupportedLayoutError(Exception):
+    pass
 
 
 def get_covering_bites(lines_to_cover, bites):
@@ -8,11 +16,15 @@ def get_covering_bites(lines_to_cover, bites):
 
     while lines_to_cover:
         l_to_cover = next(iter(lines_to_cover))
-        r_id, r = [(i, b) for i, b in enumerate(bites) if l_to_cover in b][0]
-        r = set(r)
-        clean = r.issubset(lines_to_cover)
-        lines_to_cover -= r
-        regions.append((r_id, clean))
+        matching_bites = [(i, b) for i, b in enumerate(bites) if l_to_cover in b]
+        if len(matching_bites) != 1:
+            raise UnsupportedLayoutError(f'There are multiple regions containing line {l_to_cover}')
+
+        b_id, b = matching_bites[0]
+        b = set(b)
+        clean = b.issubset(lines_to_cover)
+        lines_to_cover -= b
+        regions.append((b_id, clean))
 
     return regions
 
@@ -57,15 +69,56 @@ def get_bite_reading_order(region_centers, bite_regions):
 
     bite_reading_order = [r for r in yx_sorted_regions]
 
-    print('Bite!')
-    for r in bite_reading_order:
-        print(region_centers[r])
-
     assert len(bite_regions) == len(bite_reading_order)
     return bite_reading_order
 
 
+def get_lines_polygon(lines):
+    bboxes = [polygon_to_bbox(line.polygon) for line in lines]
+    min_x = min(bboxes, key=lambda x: x.xmin).xmin
+    min_y = min(bboxes, key=lambda x: x.ymin).ymin
+    max_x = max(bboxes, key=lambda x: x.xmax).xmax
+    max_y = max(bboxes, key=lambda x: x.ymax).ymax
+
+    polygon = np.array([
+        [min_x, min_y],
+        [max_x, min_y],
+        [max_x, max_y],
+        [min_x, max_y],
+    ])
+
+    return polygon
+
+
+def split_regions(layout, bites):
+    new_regions = []
+    for region in layout.regions:
+        covering_bites = defaultdict(list)
+        for line in region.lines:
+            for bite_id, bite in enumerate(bites):
+                if line.id in bite.lines:
+                    covering_bites[bite_id].append(line.id)
+                    break
+            else:
+                covering_bites[-1].append(line.id)
+
+        #  regions covered by a single bite need no further attention
+        if len(covering_bites) == 1:
+            new_regions.append(region)
+        else:
+            for bite, lines in covering_bites.items():
+                bite_lines = [line for line in region.lines if line.id in lines]
+                polygon = get_lines_polygon(bite_lines)
+                new_region = RegionLayout(f'{region.id}_{bite}', polygon)
+                new_region.lines = bite_lines
+                new_regions.append(region)
+
+    layout.regions = new_regions
+
+
 def process(layout, bites):
+    split_regions(layout, bites)
+
     layout_bites = [[line.id for line in r.lines] for r in layout.regions]
     all_lines_ids = list(line.id for line in layout.lines_iterator())
     out_of_bite_lines = set(all_lines_ids) - set(sum((b.lines for b in bites), []))
@@ -76,11 +129,10 @@ def process(layout, bites):
 
     coverage = [get_covering_bites(bite.lines, layout_bites) for bite in bites]
 
-    # if there are un-pure regions, split them
-    #   to make them pure
-    #   create new polygons by surrounding the textlines (like done in producing annotation for YOLO)
     for bite in coverage:
         for r in bite:
+            if not r[1]:
+                breakpoint()
             assert r[1] is True, 'Unpure regions unsupported yet!'
 
     reading_order = []

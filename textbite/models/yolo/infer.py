@@ -14,7 +14,7 @@ from ultralytics import YOLO
 from textbite.data_processing.label_studio import best_intersecting_bbox
 from textbite.geometry import AABB, polygon_to_bbox, bbox_intersection_over_area
 
-from textbite.models.improve_pagexml import process
+from textbite.models.improve_pagexml import process, UnsupportedLayoutError
 
 
 @dataclass
@@ -185,10 +185,13 @@ def main():
         with open(path_xml) as f:
             layout.from_pagexml(f)
 
-        out_xml_string = process(layout, bites)
-        out_path = os.path.join(args.save, filename)
-        with open(out_path, 'w', encoding='utf-8') as out_f:
-            out_f.write(out_xml_string)
+        try:
+            out_xml_string = process(layout, bites)
+            out_path = os.path.join(args.save, filename)
+            with open(out_path, 'w', encoding='utf-8') as out_f:
+                out_f.write(out_xml_string)
+        except UnsupportedLayoutError as e:
+            logging.warning(e)
 
 
 if __name__ == '__main__':
