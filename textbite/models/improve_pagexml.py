@@ -91,8 +91,9 @@ def process(layout, bites):
 
     # create XML reading order
     reading_order_root = ET.Element("ReadingOrder")
+    unordered_root = ET.SubElement(reading_order_root, "UnorderedGroup", attrib={'id': 'root'})
     for bite_id, bite in enumerate(reading_order):
-        xml_bite = ET.SubElement(reading_order_root, "OrderedGroup", attrib={'id': f'bite_{bite_id+1}'})
+        xml_bite = ET.SubElement(unordered_root, "OrderedGroup", attrib={'id': f'bite_{bite_id+1}'})
         for i, region_id in enumerate(bite):
             ET.SubElement(xml_bite, 'RegionRefIndexed', attrib={'regionRef': layout.regions[region_id].id, 'index': str(i)})
 
