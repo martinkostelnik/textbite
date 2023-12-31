@@ -33,6 +33,38 @@ def polygon_centroid(xs, ys):
     return c
 
 
+def get_bite_reading_order(region_centers, bite_regions):
+    y_sorted_regions = sorted(bite_regions, key=lambda r: region_centers[r][1])
+
+    # get significantly y-overlapped regions
+    # and sort them by x-axis (often a split header line or similar)
+    yx_sorted_regions = []
+
+    running_y_overlapped = None
+    Y_MARGIN = 5  # if two regions are not at least this many y-pixels aside, consider them overlapping
+    for r in y_sorted_regions:
+        if running_y_overlapped is None:
+            running_y_overlapped = [r]
+            continue
+
+        if region_centers[r[0]][1] < region_centers[running_y_overlapped[-1]][1] + Y_MARGIN:
+            running_y_overlapped.append(r)
+        else:
+            yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r][0]))
+            running_y_overlapped = [r]
+
+    yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r][0]))
+
+    bite_reading_order = [r for r in yx_sorted_regions]
+
+    print('Bite!')
+    for r in bite_reading_order:
+        print(region_centers[r])
+
+    assert len(bite_regions) == len(bite_reading_order)
+    return bite_reading_order
+
+
 def process(layout, bites):
     layout_bites = [[line.id for line in r.lines] for r in layout.regions]
     all_lines_ids = list(line.id for line in layout.lines_iterator())
@@ -51,14 +83,9 @@ def process(layout, bites):
         for r in bite:
             assert r[1] is True, 'Unpure regions unsupported yet!'
 
-    reading_order = set()
+    reading_order = []
     for bite in coverage:
-        y_sorted_regions = sorted(bite, key=lambda r: region_centers[r[0]][1])
-
-        # get significantly y-overlapped regions
-        # and sort them by x-axis (often a split header line or similar)
-
-        reading_order.add(r[0] for r in y_sorted_regions)
+        reading_order.append(get_bite_reading_order(region_centers, [r[0] for r in bite]))
 
     out_of_bite_regions = get_covering_bites(out_of_bite_lines, layout_bites)
 
