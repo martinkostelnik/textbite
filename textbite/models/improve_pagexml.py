@@ -47,13 +47,13 @@ def get_bite_reading_order(region_centers, bite_regions):
             running_y_overlapped = [r]
             continue
 
-        if region_centers[r[0]][1] < region_centers[running_y_overlapped[-1]][1] + Y_MARGIN:
+        if region_centers[r][1] < region_centers[running_y_overlapped[-1]][1] + Y_MARGIN:
             running_y_overlapped.append(r)
         else:
             yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r][0]))
             running_y_overlapped = [r]
 
-    yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r][0]))
+    yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r]))
 
     bite_reading_order = [r for r in yx_sorted_regions]
 
