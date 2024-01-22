@@ -25,7 +25,11 @@ def parse_arguments():
 
 
 def score_page(hypothesis, ground_truth):
+    hypothesis = [bite["lines"] for bite in hypothesis]
     line_ids = sum(hypothesis, []) + sum(ground_truth, [])
+
+    ground_truth = [{"lines": lines} for lines in ground_truth]
+    hypothesis = [{"lines": lines} for lines in hypothesis]
 
     hyp_lines_clusters = get_line_clusters(hypothesis)
     gt_lines_clusters = get_line_clusters(ground_truth)

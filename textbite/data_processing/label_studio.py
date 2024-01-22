@@ -33,7 +33,7 @@ class AnnotatedRegion:
     lines: List[TextLine] = field(default_factory=list)
 
 
-def best_intersecting_bbox(target_bbox, candidate_bboxes):
+def best_intersecting_bbox(target_bbox: AABB, candidate_bboxes: List[AABB]):
     best_region = None
     best_intersection = 0.0
     for i, bbox in enumerate(candidate_bboxes):
@@ -176,6 +176,7 @@ class LabelStudioExport:
 
         self.documents: List[AnnotatedDocument] = []
         self.parse_json_str(raw_data=raw_data)
+        self.documents_dict = {doc.filename: doc for doc in self.documents}
 
     def parse_json_str(self, raw_data: List[dict]) -> None:
         for annotated_file in raw_data:
