@@ -12,10 +12,12 @@ from sklearn.cluster import DBSCAN, HDBSCAN
 
 from safe_gpu import safe_gpu
 
+from textbite.embedding import EmbeddingProvider
+from textbite.geometry import PageGeometry
+from textbite.models.graph.create_graphs import Graph
 from textbite.models.graph.model import load_gcn, get_similarities
-from textbite.models.graph.create_graphs import Graph  # needed for unpickling
-
 from textbite.models.graph.train import evaluate
+from textbite.utils import TEST_FILENAMES, FILENAMES_EXCLUDED_FROM_TRAINING
 
 
 def parse_arguments():
@@ -23,7 +25,9 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--data", required=True, type=str, help="Path to a pickle file with training data.")
+    parser.add_argument("--data", required=True, type=str, help="Folder with xmls.")
+    parser.add_argument("--bert", required=True, type=str, help="Path to BertModel")
+    parser.add_argument("--tokenizer", required=True, type=str, help="Path to BertTokenizer")
     parser.add_argument("--model", required=True, type=str, help="Where to get the model")
     parser.add_argument("--normalizer", type=str, help="Where to get the normalizer")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
@@ -62,7 +66,7 @@ def bites_from_graph(graph, model):
 
 def main():
     args = parse_arguments()
-    logging.basicConfig(level=args.logging_level)
+    logging.basicConfig(level=args.logging_level, force=True)
 
     logging.info(f'{args}')
     safe_gpu.claim_gpus()
@@ -71,22 +75,43 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Training on: {device}")
 
-    with open(args.data, "rb") as f:
-        data = pickle.load(f)
-    logging.info(f'There are {len(data)} graphs')
+    xml_filenames = [xml_filename for xml_filename in os.listdir(args.data) if xml_filename.endswith(".xml") and xml_filename.replace(".xml", ".jpg") not in FILENAMES_EXCLUDED_FROM_TRAINING]
+    logging.info(f"Inferring {len(xml_filenames)} files")
 
-    if args.normalizer:
-        with open(args.normalizer, 'rb') as f:
-            normalizer = pickle.load(f)
-        normalizer.normalize_graphs(data)
+    logging.info("Creating EmbeddingProvider ...")
+    embedding_provider = EmbeddingProvider(device, args.bert, args.tokenizer)
+    logging.info("EmbeddingProvider created.")
 
+    logging.info("Loading normalizer ...")
+    with open(args.normalizer, 'rb') as f:
+        normalizer = pickle.load(f)
+    logging.info("Normalized loaded.")
+
+    logging.info("Loading GraphModel ...")
     model = load_gcn(args.model, device)
     model.eval()
+    logging.info("GraphModel loaded.")
 
     os.makedirs(args.save, exist_ok=True)
 
-    for graph in data:
-        logging.info(f"Processing: {graph.graph_id}")
+    for xml_filename in xml_filenames:
+        xml_path = os.path.join(args.data, xml_filename)
+        logging.info(f"Processing {xml_path} ...")
+
+        geometry = PageGeometry(path=xml_path)
+        geometry.set_neighbourhoods()
+        geometry.set_visibility()
+
+        for line in geometry.lines:
+            right_context = line.child.text_line.transcription.strip() if line.child else ""
+            line.embedding = embedding_provider.get_embedding(line, right_context)
+
+        try:
+            graph = Graph(xml_filename, geometry=geometry, node_embeddings_dict=None)
+        except RuntimeError:
+            logging.warning("Runtime error occured")
+            continue
+    
         result = bites_from_graph(graph, model)
 
         out_path = os.path.join(args.save, f'{graph.graph_id}.json')

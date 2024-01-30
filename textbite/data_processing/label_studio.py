@@ -178,6 +178,9 @@ class LabelStudioExport:
         self.parse_json_str(raw_data=raw_data)
         self.documents_dict = {doc.filename: doc for doc in self.documents}
 
+    def __len__(self):
+        return len(self.documents)
+
     def parse_json_str(self, raw_data: List[dict]) -> None:
         for annotated_file in raw_data:
             id = int(annotated_file["id"])
@@ -255,15 +258,15 @@ class LabelStudioExport:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, force=True)
 
-    EXPORT_PATH = r"/home/martin/textbite/data/segmentation/export-1828-12-12-2023.json"
+    EXPORT_PATH = r"/home/martin/textbite/data/segmentation/export-3397-22-01-2024.json"
     PAGEXML_PATH = r"/home/martin/textbite/data/segmentation/xmls/val-book/nikola-suhaj-loupeznik-06.xml"
     with open(EXPORT_PATH, "r") as f:
         raw_data = json.load(f)
     export1 = LabelStudioExport(raw_data=raw_data)
-
-    for doc in export1.documents:
-        if "nikola-suhaj-loupeznik-06" in doc.filename:
-            pagexml = PageLayout(file=PAGEXML_PATH)
-            doc.map_to_pagexml(pagexml)
-            # print([region.lines for region in doc.regions])
-            break
+    print(len(export1))
+    # for doc in export1.documents:
+    #     if "nikola-suhaj-loupeznik-06" in doc.filename:
+    #         pagexml = PageLayout(file=PAGEXML_PATH)
+    #         doc.map_to_pagexml(pagexml)
+    #         # print([region.lines for region in doc.regions])
+    #         break

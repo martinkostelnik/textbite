@@ -14,13 +14,13 @@ class Block(torch.nn.Module):
         dropout_prob,
     ):
         super().__init__()
-        self.gcn = ResGatedGraphConv(width, width, edge_dim=3)
+        self.gcn = GCNConv(width, width)
         self.norm = nn.LayerNorm(width)
         self.nonlin = nn.ReLU()
         self.dropout = nn.Dropout(dropout_prob)
 
-    def forward(self, x, edge_index, edge_attr):
-        x = self.gcn(x, edge_index=edge_index, edge_attr=edge_attr)
+    def forward(self, x, edge_index):
+        x = self.gcn(x, edge_index=edge_index)
         x = self.norm(x)
         x = self.nonlin(x)
         x = self.dropout(x)
@@ -49,16 +49,14 @@ class GraphModel(torch.nn.Module):
 
         self.in_proj = torch.nn.Linear(self.input_size, self.hidden_size)
         self.blocks = nn.ModuleList()
-        # for _ in range(n_layers):
-        self.blocks.append(Block(self.hidden_size, dropout_prob))
+        for _ in range(n_layers):
+            self.blocks.append(Block(self.hidden_size, dropout_prob))
         self.out_proj = torch.nn.Linear(self.hidden_size, self.output_size, bias=False)
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x, edge_index):
         x = self.in_proj(x)
-        # for block in self.blocks:
-        #     x = x + block(x, edge_index, edge_attr)
-        for _ in range(3):
-            x = self.blocks[0](x, edge_index, edge_attr)
+        for block in self.blocks:
+            x = x + block(x, edge_index)
         x = self.out_proj(x)
 
         return x

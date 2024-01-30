@@ -74,7 +74,7 @@ def evaluate(model, data, device, criterion, type: str):
         edge_attrs = graph.edge_attr.to(device)
 
         with torch.no_grad():
-            outputs = model(node_features, edge_indices, edge_attrs)
+            outputs = model(node_features, edge_indices)
             similarities = get_similarities(outputs, edge_indices)
             loss = criterion(similarities, labels)
             accuracy += per_edge_accuracy(similarities, labels)
@@ -128,7 +128,7 @@ def train(
             edge_attrs = graph.edge_attr.to(device)
             labels = graph.labels.to(device, dtype=torch.float32)
 
-            outputs = model(node_features, edge_indices, edge_attrs)
+            outputs = model(node_features, edge_indices)
             similarities = get_similarities(outputs, edge_indices)
             train_loss = criterion(similarities, labels)
             acc += per_edge_accuracy(similarities, labels)  # Note that this is distorted now, weight of graphs depends on who they meet in a batch

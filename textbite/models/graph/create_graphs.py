@@ -18,57 +18,38 @@ from textbite.language_model import create_language_model
 
 
 class Graph:
-    def __init__(self, graph_id, geometry, node_embeddings_dict, tokenizer, bert, device, yolos_path):
+    def __init__(self, graph_id, geometry, node_embeddings_dict):
         self.graph_id = graph_id
         node_features = []
-        edge_attr = []
-        labels = []
+        # labels = []
         line_ids = []
-
         from_indices = []
         to_indices = []
-        labels = []
-        with open(os.path.join(yolos_path, f"{geometry.pagexml.id}.json")) as f:
-            bites = json.load(f)
 
         for line_idx, line in enumerate(geometry.lines):
-            embedding = node_embeddings_dict[line.text_line.id].embedding[-25:]
+            # embedding = node_embeddings_dict[line.text_line.id].embedding[-25:]
+            embedding = line.embedding
             node_features.append(embedding)
             line_ids.append(line.text_line.id)
 
-            line_bite_id = node_embeddings_dict[line.text_line.id].bite_id
-
-            bert_embedding = node_embeddings_dict[line.text_line.id].embedding[:72]
+            # line_bite_id = node_embeddings_dict[line.text_line.id].bite_id
 
             connected_lines = list(set(line.neighbourhood + line.visible_lines))
             for connected_line in connected_lines:
                 to_idx = geometry.lines.index(connected_line)
-                connected_line_bite_id = node_embeddings_dict[connected_line.text_line.id].bite_id
-                label = int(line_bite_id == connected_line_bite_id)
+                # connected_line_bite_id = node_embeddings_dict[connected_line.text_line.id].bite_id
+                # label = int(line_bite_id == connected_line_bite_id)
 
                 from_indices.append(line_idx)
                 to_indices.append(to_idx)
-                labels.append(label)
-
-                nsp_prob = get_nsp_prob(tokenizer, bert, device, line.text_line.transcription.strip(), connected_line.text_line.transcription.strip())
-                bert_embedding_connected = node_embeddings_dict[connected_line.text_line.id].embedding[:72]
-
-                dist = (bert_embedding - bert_embedding_connected).pow(2).sum().sqrt().item()
-
-                same_bite_yolo = 0.0
-                for bite in bites:
-                    if line.text_line.id and connected_line.text_line.id in bite:
-                        same_bite_yolo = 1.0
-
-                edge_attr.append([same_bite_yolo, dist, nsp_prob])
-
+                # labels.append(label)
 
         # Make graph undirected
         new_from_indices = []
         new_to_indices = []
         new_labels = []
-        new_edge_attrs = []
-        for from_index, to_index, label, edge_attr_ in zip(from_indices, to_indices, labels, edge_attr):
+        # for from_index, to_index, label, edge_attr_ in zip(from_indices, to_indices, labels):
+        for from_index, to_index in zip(from_indices, to_indices):
             reverse_exists = False
             for from_index_, to_index_ in zip(from_indices, to_indices):
                 if (from_index, to_index) == (to_index_, from_index_):
@@ -83,19 +64,17 @@ class Graph:
             if not reverse_exists:
                 new_from_indices.append(to_index)
                 new_to_indices.append(from_index)
-                new_labels.append(label)
-                new_edge_attrs.append(edge_attr_)
+                # new_labels.append(label)
 
         from_indices.extend(new_from_indices)
         to_indices.extend(new_to_indices)
-        labels.extend(new_labels)
-        edge_attr.extend(new_edge_attrs)
+        # labels.extend(new_labels)
 
         self.node_features = torch.stack(node_features)  # Shape (n_nodes, n_features)
         self.line_ids = line_ids  # List of strings, (n_nodes, )
         self.edge_index = torch.tensor([from_indices, to_indices])  # Shape (2, n_edges)
-        self.edge_attr = torch.tensor(edge_attr)  # Shape (n_edges, n_features), but we have none
-        self.labels = torch.tensor(labels)  # Shape (1, n_edges)
+        self.edge_attr = torch.tensor([])  # Shape (n_edges, n_features), but we have none
+        # self.labels = torch.tensor(labels)  # Shape (1, n_edges)
 
     def __str__(self):
         result_str = ""
