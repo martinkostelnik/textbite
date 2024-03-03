@@ -9,13 +9,14 @@ from time import perf_counter
 import pickle
 
 import torch
+from sklearn.metrics import classification_report
 
 from safe_gpu import safe_gpu
 
-from textbite.models.graph.model import GraphModel, NodeNormalizer, get_similarities
-from textbite.models.yolo.create_graphs import Graph  # needed for unpickling
+from textbite.models.joiner.model import JoinerGraphModel
+from textbite.models.joiner.graph import Graph  # needed for unpickling
+from textbite.models.graph.model import NodeNormalizer
 from textbite.models.graph.create_graphs import collate_custom_graphs
-from textbite.utils import FILENAMES_EXCLUDED_FROM_TRAINING, VALIDATION_FILENAMES_BOOK, VALIDATION_FILENAMES_DICTIONARY, VALIDATION_FILENAMES_PERIODICAL
 
 
 def parse_arguments():
@@ -23,12 +24,16 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--data", required=True, type=str, help="Path to a pickle file with training data.")
+    parser.add_argument("--train", required=True, type=str, help="Path to a pickle file with training data.")
+    parser.add_argument("--val-book", required=True, type=str, help="Path to a pickle file with validation book data.")
+    parser.add_argument("--val-dict", required=True, type=str, help="Path to a pickle file with validation dict data.")
+    parser.add_argument("--val-peri", required=True, type=str, help="Path to a pickle file with validation periodical data.")
 
-    parser.add_argument("-l", "--layers", type=int, default=2, help="Number of layers in the model.")
+    parser.add_argument("-l", "--layers", type=int, default=2, help="Number of GCN blocks in the model.")
     parser.add_argument("-n", "--hidden-width", type=int, default=128, help="Hidden size of layers.")
     parser.add_argument("-o", "--output-size", type=int, default=128, help="Size of output features.")
     parser.add_argument("-d", "--dropout", type=float, default=0.1, help="Dropout probability in the model.")
+    parser.add_argument("-t", "--threshold", type=float, default=0.5, help="Classification threshold.")
 
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size")
@@ -41,15 +46,24 @@ def parse_arguments():
     return args
 
 
-def load_data(path: str) -> Tuple[List[Graph], List[Graph], List[Graph], List[Graph]]:
+def load_data(
+    path_train: str,
+    path_val_book: str,
+    path_val_dict: str,
+    path_val_peri: str,
+) -> Tuple[List[Graph], List[Graph], List[Graph], List[Graph]]:
     start = time.perf_counter()
-    with open(path, "rb") as f:
-        data = pickle.load(f)
+    with open(path_train, "rb") as f:
+        train_data = pickle.load(f)
 
-    train_data = [graph for graph in data if f"{graph.graph_id}.jpg" not in FILENAMES_EXCLUDED_FROM_TRAINING]
-    val_data_book = [graph for graph in data if f"{graph.graph_id}.jpg" in VALIDATION_FILENAMES_BOOK]
-    val_data_dict = [graph for graph in data if f"{graph.graph_id}.jpg" in VALIDATION_FILENAMES_DICTIONARY]
-    val_data_peri = [graph for graph in data if f"{graph.graph_id}.jpg" in VALIDATION_FILENAMES_PERIODICAL]
+    with open(path_val_book, "rb") as f:
+        val_data_book = pickle.load(f)
+
+    with open(path_val_dict, "rb") as f:
+        val_data_dict = pickle.load(f)
+
+    with open(path_val_peri, "rb") as f:
+        val_data_peri = pickle.load(f)
 
     end = time.perf_counter()
     logging.info(f"Train graphs: {len(train_data)} | Val graphs book: {len(val_data_book)} | Val graphs dictionary: {len(val_data_dict)} | Val graphs periodical: {len(val_data_peri)} | Took: {(end-start):.3f} s")
@@ -58,36 +72,60 @@ def load_data(path: str) -> Tuple[List[Graph], List[Graph], List[Graph], List[Gr
 
 
 # TODO: DET or similar will be super useful, it's all terribly mis-calibrated so far
-def per_edge_accuracy(similarities, labels, threshold: float=0.5):
-    # print(torch.sum((similarities > threshold)))
-    return torch.sum((similarities > threshold) == labels) / len(labels)
+def per_edge_accuracy(similarities, labels, threshold: float) -> float:
+    if len(labels) == 0 or len(similarities) == 0 or len(similarities) != len(labels):
+        raise ValueError("Input arguments cannot be empty and they must have same size")
+    
+    return (torch.sum((similarities > threshold) == labels) / len(labels)).cpu().item()
 
 
-def evaluate(model, data, device, criterion, type: str):
+def get_similarities(node_features, edge_indices):
+    lhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[0, :])
+    rhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[1, :])
+    fea_dim = lhs_nodes.shape[1]
+    similarities = torch.sum(lhs_nodes * rhs_nodes / fea_dim, dim=1)
+
+    return similarities
+
+
+def evaluate(model, data, device, criterion, type: str, threshold: float):
     model.eval()
 
     val_loss = 0.0
     accuracy = 0.0
+    
+    all_similarities = torch.tensor([], dtype=torch.float32)
+    all_labels = torch.tensor([], dtype=torch.float32)
+
     for graph in data:
         node_features = graph.node_features.to(device)
         edge_indices = graph.edge_index.to(device)
         labels = graph.labels.to(device, dtype=torch.float32)
         edge_attrs = graph.edge_attr.to(device)
+        all_labels = torch.cat([all_labels, labels.cpu()])
 
         with torch.no_grad():
-            outputs = model(node_features, edge_indices)
+            outputs = model(node_features, edge_indices, edge_attrs)
             similarities = get_similarities(outputs, edge_indices)
             loss = criterion(similarities, labels)
-            accuracy += per_edge_accuracy(similarities, labels)
-        val_loss += loss.cpu().item()
 
-    print(f'Val loss {type}: {val_loss/len(data):.4f} Edge accuracy: {100.0 * accuracy/len(data):.2f} % ({accuracy:.2f}/{len(data)})')
+            all_similarities = torch.cat([all_similarities, similarities.cpu()])
+            val_loss += loss.cpu().item()
+
+        accuracy = per_edge_accuracy(all_similarities, all_labels, threshold)
+        all_zeros_acc = (len(all_labels) - torch.sum(all_labels)) / len(all_labels)
+
+    all_predictions = ((all_similarities > threshold) == all_labels).detach().cpu().numpy()
+
+    print(f"Val loss {type}: {val_loss/len(data):.4f} Edge accuracy: {(100 * accuracy):.4f} % (zeros {(100.0 * all_zeros_acc):.4f} %)", end="")
+    print("WARNING: Predicting only zeros" if torch.sum(all_similarities > threshold).item() == 0 else "")
+    print(classification_report(all_labels, all_predictions, digits=4))
 
     return val_loss
 
 
 def train(
-        model: GraphModel,
+        model: JoinerGraphModel,
         device,
         train_data,
         val_data_book,
@@ -95,25 +133,25 @@ def train(
         val_data_peri,
         report_interval: int,
         lr: float,
+        threshold: float,
         batch_size: int,
         save_path: str,
         checkpoint_dir: str,
 ):
-    optim = torch.optim.Adam(model.parameters(), lr)
-    criterion = torch.nn.BCEWithLogitsLoss(reduction="sum")
-    # criterion = torch.nn.BCEWithLogitsLoss()
-
     model.train()
 
-    accs = []
-    losses = []
-    running_loss = 0.0
-    t0 = time.time()
-    acc = 0.0
+    optim = torch.optim.AdamW(model.parameters(), lr)
+    # criterion = torch.nn.BCEWithLogitsLoss(reduction="sum", pos_weight=torch.tensor([0.5]).to(device))
+    criterion = torch.nn.BCEWithLogitsLoss()
 
+    running_loss = 0.0
     batch = []
     batch_id = 0
 
+    all_similarities = torch.tensor([], dtype=torch.float32)
+    all_labels = torch.tensor([], dtype=torch.float32)
+
+    t_start = time.time()
     try:
         for graph_i, graph in enumerate(itertools.cycle(train_data)):
             batch.append(graph)
@@ -129,10 +167,12 @@ def train(
             edge_attrs = graph.edge_attr.to(device)
             labels = graph.labels.to(device, dtype=torch.float32)
 
-            outputs = model(node_features, edge_indices)
+            outputs = model(node_features, edge_indices, edge_attrs)
             similarities = get_similarities(outputs, edge_indices)
             train_loss = criterion(similarities, labels)
-            acc += per_edge_accuracy(similarities, labels)  # Note that this is distorted now, weight of graphs depends on who they meet in a batch
+            
+            all_similarities = torch.cat([all_similarities, similarities.cpu()])
+            all_labels = torch.cat([all_labels, labels.cpu()])
 
             optim.zero_grad()
             train_loss.backward()
@@ -141,41 +181,43 @@ def train(
             running_loss += train_loss.cpu().item()
 
             if batch_id % report_interval == 0:
-                t_diff = time.time() - t0
-                print(f"After {batch_id} Batches ({batch_id*batch_size} Graphs): time {1000.0*t_diff/(report_interval):.1f}ms /B ({1000.0*t_diff/(report_interval*batch_size):.1f}ms /G), loss {running_loss/(report_interval):.4f} /B {running_loss/(report_interval*batch_size):.4f} /G, acc {100.0*acc/(report_interval):.2f} %")
-                accs.append(100.0 * acc.cpu().item()/report_interval)
-                losses.append(running_loss/report_interval)
-                running_loss = 0.0
-                acc = 0.0
-                t0 = time.time()
+                acc = per_edge_accuracy(all_similarities, all_labels, threshold)
+                t_elapsed_ms = 1000.0 * (time.time() - t_start) / report_interval
+                all_zeros_acc = (len(all_labels) - torch.sum(all_labels)) / len(all_labels)
 
-                evaluate(model, val_data_book, device, criterion, "book")
-                evaluate(model, val_data_dict, device, criterion, "dictionary")
-                evaluate(model, val_data_peri, device, criterion, "periodical")
+                all_predictions = ((all_similarities > threshold) == all_labels).detach().cpu().numpy()
+
+                print("TRAIN REPORT:")
+                print(f"After {batch_id} Batches ({graph_i + 1} Graphs):")
+                print(f"Time {t_elapsed_ms:.1f} ms /B ", end="")
+                print(f"({(t_elapsed_ms / batch_size):.1f} ms /G) | ", end="")
+                print(f"loss {running_loss / (report_interval * batch_size):.4f} /G")
+                print(classification_report(all_labels.detach().numpy(), all_predictions, digits=4))
+                
+                if torch.sum(all_similarities > threshold).item() == 0:
+                    print(f"WARNING: Predicting only zeros in this report period")
+
+                running_loss = 0.0
+                all_similarities = torch.tensor([], dtype=torch.float32)
+                all_labels = torch.tensor([], dtype=torch.float32)
+
+                evaluate(model, val_data_book, device, criterion, "book", threshold)
+                evaluate(model, val_data_dict, device, criterion, "dictionary", threshold)
+                evaluate(model, val_data_peri, device, criterion, "periodical", threshold)
                 print()
 
                 if checkpoint_dir:
-                    torch.save(model.dict_for_saving, os.path.join(checkpoint_dir, f"{model.__class__.__name__}-joiner-checkpoint.{graph_i}.pth"))
+                    checkpoint_filename = f"{model.__class__.__name__}-joiner-checkpoint.{graph_i}.pth"
+                    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+                    torch.save(
+                        model.dict_for_saving,
+                        checkpoint_path,
+                    )
 
-            # if f1_val > best_f1_val:
-            #     best_f1_val = f1_val
-            #     print(f"SAVING MODEL at f1_val = {f1_val}")
-            #     torch.save(dict_for_saving, os.path.join(save_path, "BaselineModel.pth"))
+                t_start = time.time()
 
-            # print(f"Epoch {epoch + 1} finished | train f1 = {f1:.2f} loss = {train_loss/train_nb_examples:.3e} | val f1 = {f1_val:.2f} loss = {val_loss/val_nb_examples:.3e} {'| Only zeros in last val batch!' if not any(preds) else ''}")
-            # if (epoch + 1) % 10 == 0:
-            #     target_names = ["None", "Terminating", "Title"]  # should be provided by model or someone like that
-            #     print("TRAIN REPORT:")
-            #     print(classification_report(epoch_labels, epoch_preds, digits=4, zero_division=0, target_names=target_names))
-            #     print(confusion_report(epoch_labels, epoch_preds, target_names))
-            #     print("VALIDATION REPORT:")
-            #     print(classification_report(epoch_labels_val, epoch_preds_val, digits=4, zero_division=0, target_names=target_names))
-            #     print(confusion_report(epoch_labels_val, epoch_preds_val, target_names))
-            #     print("VALIDATION REPORT:")
     except KeyboardInterrupt:
         pass
-
-    return accs, losses
 
 
 def main():
@@ -187,25 +229,18 @@ def main():
     logging.info(f'{args}')
     safe_gpu.claim_gpus()
 
-    if args.checkpoint_dir:
-        os.makedirs(args.checkpoint_dir, exist_ok=True)
-
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Training on: {device}")
 
+    # Data
     logging.info("Loading data ...")
-    train_graphs, val_graphs_book, val_graphs_dict, val_graphs_peri = load_data(args.data)
-    # train_graphs = train_graphs[:50]
+    train_graphs, val_graphs_book, val_graphs_dict, val_graphs_peri = load_data(args.train, args.val_book, args.val_dict, args.val_peri)
     logging.info(f"Data loaded.")
 
     logging.info("Creating normalizer ...")
     normalizer = NodeNormalizer(train_graphs)
-    logging.info("Saving normalizer ...")
-    os.makedirs(args.save, exist_ok=True)
-    with open(os.path.join(args.save, "normalizer.pkl"), 'wb') as f:
-        pickle.dump(normalizer, f)
-    logging.info("Normalizer created and saved.")
+    logging.info("Normalizer created")
 
     logging.info("Normalizing train data ...")
     normalizer.normalize_graphs(train_graphs)
@@ -215,10 +250,15 @@ def main():
     normalizer.normalize_graphs(val_graphs_peri)
     logging.info("Train and validation data normalized.")
 
+    # Output folders
+    os.makedirs(args.save, exist_ok=True)
+    if args.checkpoint_dir:
+        os.makedirs(args.checkpoint_dir, exist_ok=True)
+
     # Model
     logging.info("Creating model ...")
     input_size = train_graphs[0].node_features.size(dim=1)
-    model = GraphModel(
+    model = JoinerGraphModel(
         device=device,
         input_size=input_size,
         output_size=args.output_size,
@@ -233,7 +273,7 @@ def main():
     logging.info("Starting training ...")
     start = perf_counter()
 
-    accs, losses = train(
+    train(
         model=model,
         device=device,
         train_data=train_graphs,
@@ -242,6 +282,7 @@ def main():
         val_data_peri=val_graphs_peri,
         report_interval=args.report_interval,
         lr=args.lr,
+        threshold=args.threshold,
         batch_size=args.batch_size,
         save_path=args.save,
         checkpoint_dir=args.checkpoint_dir,
@@ -250,13 +291,6 @@ def main():
     t = end - start
     logging.info(f"Training finished. Took {t:.1f} s")
 
-    import matplotlib.pyplot as plt
-    plt.subplot(1, 2, 1)
-    plt.plot(accs)
-    plt.subplot(1, 2, 2)
-    plt.plot(losses)
-
-    plt.savefig("asdf.pdf")
 
 if __name__ == "__main__":
     main()
