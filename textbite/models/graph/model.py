@@ -112,7 +112,7 @@ class NodeNormalizer:
             nb_nodes += g.node_features.shape[0]
 
         self.mu = stats_1 / nb_nodes
-        self.std = (stats_2 / nb_nodes - self.mu ** 2) ** 0.5
+        self.std = (stats_2 / nb_nodes - self.mu.pow(2)).sqrt()
 
     def normalize_graphs(self, graphs: List[Graph]) -> None:
         for g in graphs:
