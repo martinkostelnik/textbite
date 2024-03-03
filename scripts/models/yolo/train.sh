@@ -1,24 +1,21 @@
 #!/bin/bash
 
 # Author: Martin Kostelník
-# Brief: Train graph model for bite joining
-# Date: 30.12.2023
+# Brief: Train YOLO model on SGE
+# Date: 31.01.2024
 
-BASE=/home/martin/textbite
+BASE=/mnt/matylda1/xkoste12
 
-source $BASE/../semant/venv/bin/activate
+source $BASE/venv/bin/activate
+ulimit -t unlimited
 
-SCRIPTS_DIR=$BASE/textbite/models/yolo
-DATA_PATH=$BASE/graphs.pkl
+export CUDA_VISIBLE_DEVICES=$(nvidia-smi --query-gpu=memory.free,index --format=csv,nounits,noheader | sort -nr | head -1 | awk '{ print $NF }')
 
-python -u $SCRIPTS_DIR/train.py \
-    --data $DATA_PATH \
-    -l 3 \
-    -n 128 \
-    -o 128 \
-    -d 0.1 \
-    --lr 1e-5 \
-    --batch-size 256 \
-    --report-interval 100 \
-    --save $BASE/models \
-    --checkpoint-dir $BASE/models
+MODEL_PATH=$BASE/textbite-yolo/yolov8n.pt
+DATA_PATH=$BASE/textbite-yolo/data.yaml
+SAVE_PATH=$BASE/yolo-n-640
+EPOCHS=10
+
+mkdir $SAVE_PATH
+
+yolo detect train model=$MODEL_PATH data=$DATA_PATH epochs=$EPOCHS imgsz=640 project=$SAVE_PATH amp=False >$SAVE_PATH/out.txt 2>&1

@@ -1,41 +1,38 @@
 #!/bin/bash
 
-set -euo pipefail
+# Author: Martin Kostelník
+# Brief: Evaluate YOLO models
+# Date: 28.12.2023
 
-usage="usage: $0 model_path out_dir"
+BASE=/home/martin/textbite
 
-if [ "$#" -ne 2 ]
-then
-    echo "$usage" >&2
-    exit 2
-fi
+source $BASE/../semant/venv/bin/activate
 
-model_path=$1
-out_dir=$2
-mkdir -p "$out_dir"
+SCRIPTS_DIR=$BASE/textbite/models/yolo
+IMG_PATH=$BASE/data/segmentation/images/test
+XML_PATH=$BASE/data/segmentation/xmls/test
+ALTO_PATH=$BASE/data/segmentation/altos
+LABELS_PATH=$BASE/data/segmentation/labels-merged/test
+MODEL_DIR=$BASE/yolo-models
+SAVE_PATH=$BASE/yolo-evaluation
 
-xml_dir=/mnt/matylda1/xkoste12/textbite-data/xmls
-img_dir=/mnt/matylda1/xkoste12/textbite-data/images
-label_dir=/mnt/matylda1/xkoste12/textbite-data/labels-merged
+mkdir $SAVE_PATH
+MODELS=$(ls "$MODEL_DIR")
 
-portions=$(ls "$label_dir" | grep -v train)
-
-# the following better gets replaced by proper installation later down the road
-TEXTBITE_ROOT=/mnt/matylda5/ibenes/teh_codez/textbite
-
-for portion in $portions
+for model in $MODELS
 do
-    python3 $TEXTBITE_ROOT/textbite/models/yolo/infer.py \
-        --model "$model_path" \
-        --data "$xml_dir/$portion" \
-        --images "$img_dir/$portion" \
-        --save "$out_dir/$portion" \
-        --logging-level INFO \
-        2> "$out_dir/$portion.infer.log"
+    CURRENT_SAVE_PATH=$SAVE_PATH/$model
+    echo $CURRENT_SAVE_PATH
 
-    python3 $TEXTBITE_ROOT/textbite/models/evaluate.py \
-        --hypothesis "$out_dir/$portion" \
-        --ground-truth "$label_dir/$portion" \
-        2> "$out_dir/$portion.evaluate.log" |\
-        tee "$out_dir/$portion.results"
+    python $SCRIPTS_DIR/infer.py \
+        --logging-level INFO \
+        --model $MODEL_DIR/$model \
+        --data $XML_PATH \
+        --altos $ALTO_PATH \
+        --images $IMG_PATH \
+        --save $CURRENT_SAVE_PATH
+
+    python $SCRIPTS_DIR/../evaluate.py \
+        --hypothesis $CURRENT_SAVE_PATH \
+        --ground-truth $LABELS_PATH
 done
