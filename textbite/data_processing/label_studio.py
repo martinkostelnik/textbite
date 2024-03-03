@@ -8,7 +8,7 @@ import logging
 
 from pero_ocr.document_ocr.layout import PageLayout, TextLine
 
-from textbite.geometry import AABB, polygon_to_bbox, bbox_intersection, bbox_to_yolo
+from textbite.geometry import AABB, polygon_to_bbox, bbox_to_yolo, best_intersecting_bbox
 
 
 class RegionType(Enum):
@@ -31,18 +31,6 @@ class AnnotatedRegion:
     label: RegionType
     bbox: AABB
     lines: List[TextLine] = field(default_factory=list)
-
-
-def best_intersecting_bbox(target_bbox: AABB, candidate_bboxes: List[AABB]):
-    best_region = None
-    best_intersection = 0.0
-    for i, bbox in enumerate(candidate_bboxes):
-        intersection = bbox_intersection(target_bbox, bbox)
-        if intersection > best_intersection:
-            best_intersection = intersection
-            best_region = i
-
-    return best_region
 
 
 @dataclass

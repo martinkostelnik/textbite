@@ -45,7 +45,7 @@ def main():
         
         result_str = annotated_document.get_yolo_str()
 
-        save_path = os.path.join(args.save, filename_img.replace(".jpg", ".yolo"))
+        save_path = os.path.join(args.save, filename_img.replace(".jpg", ".txt"))
         with open(save_path, "w") as f:
             print(result_str, file=f, end="")
 
