@@ -3,18 +3,26 @@ from typing import List, Optional
 import torch
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+from transformers import BertTokenizerFast, BertModel
 
 from pero_ocr.document_ocr.layout import PageLayout
 
-from textbite.geometry import AABB, bbox_area, bbox_center
+from textbite.geometry import AABB, bbox_area, bbox_center, dist_l2
 
 
 class TextFeaturesProvider:
-    def __init__(self):
-        pass
+    def __init__(
+        self,
+        tokenizer: Optional[BertTokenizerFast]=None,
+        czert: Optional[BertModel]=None,
+        device=None,
+        ):
+        self.tokenizer = tokenizer
+        self.czert = czert
+        self.device = device
 
-    def get_tfidf_features(self, transcriptions: List[str]) -> List[torch.FloatTensor]:
-        vectorizer = TfidfVectorizer(max_features=64)
+    def get_tfidf_features(self, transcriptions: List[str], max_features: int=64) -> List[torch.FloatTensor]:
+        vectorizer = TfidfVectorizer(max_features=max_features)
 
         try:
             tfidf_matrix = vectorizer.fit_transform(transcriptions)
@@ -24,13 +32,35 @@ class TextFeaturesProvider:
         tfidf_list = tfidf_matrix.todense(order="C").tolist()
 
         for item in tfidf_list:
-            if len(item) != 64:
-                to_add = 64 - len(item)
+            if len(item) != max_features:
+                to_add = max_features - len(item)
                 item.extend([0.0] * to_add)
 
         tfidf_list = [torch.tensor(features, dtype=torch.float32) for features in tfidf_list]
 
         return tfidf_list
+    
+    def get_czert_features(self, text: str):
+        assert self.czert is not None
+        assert self.tokenizer is not None
+
+        text = text.replace("\n", " ").strip()
+
+        tokenized_text = self.tokenizer(
+            text,
+            max_length=512,
+            return_tensors="pt",
+        )
+        input_ids = tokenized_text["input_ids"].to(self.device)
+        token_type_ids = tokenized_text["token_type_ids"].to(self.device)
+        attention_mask = tokenized_text["attention_mask"].to(self.device)
+
+        czert_outputs = self.czert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
+
+        pooler_output = czert_outputs.pooler_output
+        cls_output = czert_outputs.last_hidden_state[:, 0, :]
+
+        return pooler_output, cls_output
 
 
 class GeometryFeaturesProvider:

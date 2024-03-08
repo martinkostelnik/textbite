@@ -1,10 +1,6 @@
-from typing import List
-
 import torch
 from torch import nn
-from torch_geometric.nn import GCNConv, ResGatedGraphConv, GATConv
-
-from textbite.models.graph.create_graphs import Graph
+from torch_geometric.nn import ResGatedGraphConv
 
 
 class Block(torch.nn.Module):
@@ -16,14 +12,14 @@ class Block(torch.nn.Module):
         super().__init__()
         self.gcn = ResGatedGraphConv(width, width, edge_dim=1)
         self.norm = nn.LayerNorm(width)
-        self.nonlin = nn.ReLU()
+        self.nonlin = nn.GELU()
         self.dropout = nn.Dropout(dropout_prob)
 
     def forward(self, x, edge_index, edge_attr):
         x = self.gcn(x, edge_index=edge_index, edge_attr=edge_attr)
         x = self.norm(x)
         x = self.nonlin(x)
-        x = self.dropout(x)
+        # x = self.dropout(x)
 
         return x
 
@@ -46,6 +42,7 @@ class JoinerGraphModel(torch.nn.Module):
         self.output_size = output_size
         self.n_layers = n_layers
         self.dropout_prob = dropout_prob
+        self.dropout = nn.Dropout(dropout_prob)
 
         self.in_proj = torch.nn.Linear(self.input_size, self.hidden_size)
         self.blocks = nn.ModuleList()
@@ -56,8 +53,10 @@ class JoinerGraphModel(torch.nn.Module):
     def forward(self, x, edge_index, edge_attr):
         edge_attr = edge_attr.reshape(shape=(len(edge_attr), 1))
         x = self.in_proj(x)
+        x = self.dropout(x)
         for block in self.blocks:
-            x = x + block(x, edge_index, edge_attr)
+            # x = x + block(x, edge_index, edge_attr)
+            x = block(x, edge_index, edge_attr)
         x = self.out_proj(x)
 
         return x

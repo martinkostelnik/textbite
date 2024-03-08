@@ -4,12 +4,15 @@ import os
 import pickle
 
 from ultralytics import YOLO
+import torch
+from transformers import BertModel, BertTokenizerFast
 
 from pero_ocr.document_ocr.layout import PageLayout
 
 from textbite.data_processing.label_studio import LabelStudioExport
 from textbite.models.yolo.infer import YoloBiter
 from textbite.models.joiner.graph import JoinerGraphProvider
+from textbite.utils import CZERT_PATH
 
 
 def parse_arguments():
@@ -30,9 +33,21 @@ def main():
     logging.basicConfig(level=args.logging_level, force=True)
     logging.getLogger("ultralytics").setLevel(logging.WARNING)
 
+    # Load CZERT and tokenizer
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logging.info(f"Creating graphs on: {device}")
+
+    logging.info("Loading tokenizer ...")
+    tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
+    logging.info("Tokenizer loaded.")
+    logging.info("Loading CZERT ...")
+    czert = BertModel.from_pretrained(CZERT_PATH)
+    czert = czert.to(device)
+    logging.info("CZERT loaded.")
+
     export = LabelStudioExport(args.json)
     yolo = YoloBiter(YOLO(args.model))
-    graph_provider = JoinerGraphProvider()
+    graph_provider = JoinerGraphProvider(tokenizer, czert, device)
 
     xml_filenames = [xml_filename for xml_filename in os.listdir(args.xmls) if xml_filename.endswith(".xml")]
     bad_files = 0
@@ -52,12 +67,13 @@ def main():
 
         pagexml = PageLayout(file=path_xml)
         document.map_to_pagexml(pagexml)
-        try:
-            graph = graph_provider.get_graph_from_file(yolo, path_img, pagexml, document)
-        except RuntimeError:
-            bad_files += 1
-            logging.warning(f"Runtime error detected, skipping. (total {bad_files} bad files)")
-            continue
+        bites = yolo.produce_bites(path_img, pagexml)
+        # try:
+        graph = graph_provider.get_graph_from_file(bites, path_img, pagexml, document)
+        # except RuntimeError:
+        #     bad_files += 1
+        #     logging.warning(f"Runtime error detected, skipping. (total {bad_files} bad files)")
+        #     continue
 
         graphs.append(graph)
 

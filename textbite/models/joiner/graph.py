@@ -3,13 +3,14 @@ from typing import Optional, List, Dict, Tuple
 
 import itertools
 import torch
+from transformers import BertModel, BertTokenizerFast
 
 from pero_ocr.document_ocr.layout import PageLayout
 
-from textbite.models.yolo.infer import YoloBiter
+from textbite.models.yolo.infer import YoloBiter, Bite
 from textbite.models.feature_extraction import TextFeaturesProvider, GeometryFeaturesProvider
 from textbite.data_processing.label_studio import AnnotatedDocument
-from textbite.geometry import best_intersecting_bbox, polygon_to_bbox, AABB, PageGeometry
+from textbite.geometry import best_intersecting_bbox, polygon_to_bbox, AABB, PageGeometry, dist_l2
 
 
 class Graph:
@@ -26,7 +27,7 @@ class Graph:
 
         self.node_features = torch.stack(node_features)  # Shape (n_nodes, n_features)
         self.edge_index = torch.tensor([from_indices, to_indices], dtype=torch.int64)  # Shape (2, n_edges)
-        self.edge_attr = torch.tensor(edge_attr)  # Shape (n_edges, n_features), but we have none
+        self.edge_attr = torch.stack(edge_attr)  # Shape (n_edges, n_features)
         self.labels = torch.tensor(labels)  # Shape (1, n_edges)
 
     def __str__(self):
@@ -43,8 +44,13 @@ class Graph:
 
 
 class JoinerGraphProvider:
-    def __init__(self):
-        self.text_features_provider = TextFeaturesProvider()
+    def __init__(
+        self,
+        tokenizer: Optional[BertTokenizerFast]=None,
+        czert: Optional[BertModel]=None,
+        device=None,
+        ):
+        self.text_features_provider = TextFeaturesProvider(tokenizer, czert, device)
         self.geometric_features_provider = GeometryFeaturesProvider()
 
     def get_transcriptions(self, regions: List[AABB], pagexml: PageLayout) -> List[str]:
@@ -153,28 +159,57 @@ class JoinerGraphProvider:
 
         return labels
     
-    def create_edge_attr(self, edges: List[Tuple[int, int]], transcriptions: List[str]) -> List[torch.FloatTensor]:
-        text_features = self.text_features_provider.get_tfidf_features(transcriptions)
-        edge_attr = []
+    def create_edge_attr(
+            self,
+            edges: List[Tuple[int, int]],
+            transcriptions: List[str],
+            regions: List[AABB],
+            czert_embeddings: List[Tuple[torch.FloatTensor, torch.FloatTensor]],
+        ) -> List[torch.FloatTensor]:
+        geometry = PageGeometry(regions=regions)
+        text_features = self.text_features_provider.get_tfidf_features(transcriptions, 256)
+        edge_attrs = []
 
         for from_idx, to_idx in edges:
+            edge_attr = []
+
             from_attrs = text_features[from_idx]
             to_attrs = text_features[to_idx]
-            dist = (from_attrs - to_attrs).pow(2).sum().sqrt()
+            dist = (from_attrs - to_attrs).pow(2).sum().sqrt().item()
             edge_attr.append(dist)
 
-        return edge_attr
+            from_region = geometry.regions[from_idx]
+            to_region = geometry.regions[to_idx]
+
+            x_dist = abs(from_region.center.x - to_region.center.x)
+            y_dist = abs(from_region.center.y - to_region.center.y)
+            dist = dist_l2(from_region.center, to_region.center)
+
+            edge_attr.append(x_dist)
+            edge_attr.append(y_dist)
+            edge_attr.append(dist)
+
+            from_pooler, from_cls = czert_embeddings[from_idx]
+            to_pooler, to_cls = czert_embeddings[to_idx]
+
+            pooler_dist = torch.cosine_similarity(from_pooler, to_pooler).item()
+            cls_dist = torch.cosine_similarity(from_cls, to_cls).item()
+
+            edge_attr.append(pooler_dist)
+            edge_attr.append(cls_dist)
+
+            edge_attrs.append(torch.tensor(edge_attr, dtype=torch.float32))
+
+        return edge_attrs
 
     def get_graph_from_file(
         self,
-        model: YoloBiter,
+        bites: List[Bite],
         path_img: str,
         pagexml: PageLayout,
         document: Optional[AnnotatedDocument]=None, # None when running inference
     ) -> Graph:
-        # texts, titles = model.find_bboxes(path_img)
-        all_regions = [bite.bbox for bite in model.produce_bites(path_img, pagexml)]
-        # all_regions = texts + titles
+        all_regions = [bite.bbox for bite in bites]
 
         if len(all_regions) < 2:
             raise RuntimeError("To create graph from regions, at least 2 regions must exist")
@@ -182,13 +217,18 @@ class JoinerGraphProvider:
         file_basename = os.path.basename(path_img).replace(".jpg", "")
 
         transcriptions = self.get_transcriptions(all_regions, pagexml)
+        czert_embeddings = []
+
+        for t in transcriptions:
+            czert_embedding = self.text_features_provider.get_czert_features(t)
+            czert_embeddings.append(czert_embedding)
 
         node_features = self.geometric_features_provider.get_regions_features(all_regions, pagexml)
 
         # edges = self.create_geometric_edges(all_regions, pagexml)
         edges = self.create_all_edges(all_regions)
 
-        edge_attr = self.create_edge_attr(edges, transcriptions)
+        edge_attr = self.create_edge_attr(edges, transcriptions, all_regions, czert_embeddings)
 
         labels = self.create_labels(all_regions, edges, document)
 
@@ -210,8 +250,10 @@ class JoinerGraphProvider:
 if __name__ == "__main__":
     from ultralytics import YOLO
     from textbite.data_processing.label_studio import LabelStudioExport
+    import logging
+    from textbite.utils import CZERT_PATH
 
-    MODEL_PATH = r"/home/martin/textbite/models/yolov8n.pt"
+    MODEL_PATH = r"/home/martin/textbite/yolo-models-20-02-24/yolo-s-800.pt"
 
     # FILENAME = "hudba-vecneho-zivota-02"
     # IMG_PATH = r"/home/martin/textbite/data/segmentation/images/val-book/{FILENAME}.jpg"
@@ -226,20 +268,35 @@ if __name__ == "__main__":
     XML_PATH = f"/home/martin/textbite/data/segmentation/xmls/val-peri/{FILENAME}.xml"
     
     EXPORT_PATH = r"/home/martin/textbite/data/segmentation/export-3396-22-01-2024.json"
+
+    # Load CZERT and tokenizer
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logging.info(f"Creating graphs on: {device}")
+
+    logging.info("Loading tokenizer ...")
+    tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
+    logging.info("Tokenizer loaded.")
+    logging.info("Loading CZERT ...")
+    czert = BertModel.from_pretrained(CZERT_PATH)
+    czert = czert.to(device)
+    logging.info("CZERT loaded.")
     
-    graph_provider = JoinerGraphProvider()
+    graph_provider = JoinerGraphProvider(tokenizer, czert, device)
     biter = YoloBiter(YOLO(MODEL_PATH))
     pagexml = PageLayout(file=XML_PATH)
     export = LabelStudioExport(path=EXPORT_PATH)
     doc = export.documents_dict[f"{FILENAME}.jpg"]
 
+    bites = biter.produce_bites(IMG_PATH, pagexml)
+
     graph = graph_provider.get_graph_from_file(
-        model=biter,
+        bites=bites,
         path_img=IMG_PATH,
         pagexml=pagexml,
         document=doc,
     )
 
-    print(graph)
-    print(f"Edges: {graph.edge_index}")
-    print(f"Labels: {graph.labels}")
+    # print(graph)
+    # print(graph.node_features)
+    # print(f"Edges: {graph.edge_index}")
+    # print(f"Labels: {graph.labels}")

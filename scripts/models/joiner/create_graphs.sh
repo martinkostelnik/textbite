@@ -10,10 +10,10 @@ source $BASE/../semant/venv/bin/activate
 
 SCRIPTS_DIR=$BASE/textbite/models/joiner
 JSON_PATH=$BASE/data/segmentation/export-3396-22-01-2024.json
-MODEL_PATH=$BASE/yolo-models/yolo-s-800.pt
+MODEL_PATH=$BASE/yolo-models-20-02-24/yolo-s-800.pt
 IMG_PATH=$BASE/data/segmentation/images/train
 XML_PATH=$BASE/data/segmentation/xmls/train
-SAVE_PATH=$BASE/joiner-graphs-ones
+SAVE_PATH=$BASE/joiner-graphs-czert
 FILENAME=graphs-train.pkl
 
 mkdir -p $SAVE_PATH

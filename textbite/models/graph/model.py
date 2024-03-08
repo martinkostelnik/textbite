@@ -117,3 +117,22 @@ class NodeNormalizer:
     def normalize_graphs(self, graphs: List[Graph]) -> None:
         for g in graphs:
             g.node_features = (g.node_features - self.mu) / self.std
+
+
+class EdgeNormalizer:
+    def __init__(self, graphs: List[Graph]):
+        stats_1 = torch.zeros_like(graphs[0].edge_attr[0])
+        stats_2 = torch.zeros_like(graphs[0].edge_attr[0])
+        nb_edges = 0
+
+        for g in graphs:
+            stats_1 += g.edge_attr.sum(axis=0)
+            stats_2 += g.edge_attr.pow(2).sum(axis=0)
+            nb_edges += g.edge_attr.shape[0]
+
+        self.mu = stats_1 / nb_edges
+        self.std = (stats_2 / nb_edges - self.mu.pow(2)).sqrt()
+
+    def normalize_graphs(self, graphs: List[Graph]) -> None:
+        for g in graphs:
+            g.edge_attr = (g.edge_attr - self.mu) / self.std
