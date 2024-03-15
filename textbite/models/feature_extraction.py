@@ -7,7 +7,7 @@ from transformers import BertTokenizerFast, BertModel
 
 from pero_ocr.document_ocr.layout import PageLayout
 
-from textbite.geometry import AABB, bbox_area, bbox_center, dist_l2
+from textbite.geometry import bbox_area, bbox_center, dist_l2, PageGeometry, RegionGeometry
 
 
 class TextFeaturesProvider:
@@ -69,33 +69,69 @@ class GeometryFeaturesProvider:
         self.pagexml = None
         self.page_geometry = None
 
-    def get_regions_features(self, regions: List[AABB], pagexml: PageLayout) -> List[torch.FloatTensor]:
+    def get_regions_features(self, geometry: PageGeometry, pagexml: PageLayout) -> List[torch.FloatTensor]:
         self.pagexml = pagexml
-        return [self.get_region_features(region) for region in regions]
+        return [self.get_region_features(region) for region in geometry.regions]
 
-    def get_region_features(self, region: AABB) -> torch.FloatTensor:
+    def get_region_features(self, region_geometry: RegionGeometry) -> torch.FloatTensor:
         assert self.pagexml is not None
         page_height, page_width = self.pagexml.page_size
 
-        center = bbox_center(region)
-        feature_center_x = center.x
-        feature_center_y = center.y
+        region = region_geometry.bbox
+
+        feature_center_x = region_geometry.center.x
+        feature_center_y = region_geometry.center.y
+        feature_center_x_relative = region_geometry.center.x / page_width
+        feature_center_y_relative = region_geometry.center.y / page_height
 
         feature_xmin = float(region.xmin)
         feature_xmax = float(region.xmax)
         feature_ymin = float(region.ymin)
         feature_ymax = float(region.ymax)
 
-        feature_area = bbox_area(region)
+        feature_xmin_relative = feature_xmin / page_width
+        feature_xmax_relative = feature_xmax / page_width
+        feature_ymin_relative = feature_ymin / page_height
+        feature_ymax_relative = feature_ymax / page_height
+
+        feature_area = region_geometry.bbox_area
         feature_area_relative = feature_area / (page_width * page_height)
 
-        feature_width = feature_xmax - feature_xmin
+        feature_width = region_geometry.width
         feature_width_relative = feature_width / page_width
 
-        feature_height = feature_ymax - feature_ymin
+        feature_height = region_geometry.height
         feature_height_relative = feature_height / page_height
 
         feature_ratio = feature_width / feature_height
+
+        feature_number_of_predecessors = float(region_geometry.number_of_predecessors)
+        feature_number_of_successors = float(region_geometry.number_of_successors)
+
+        feature_area_relative_to_parent = 0.0
+        feature_area_relative_to_child = 0.0
+
+        feature_width_relative_to_parent = 0.0
+        feature_width_relative_to_child = 0.0
+        
+        feature_distance_to_parent_y = 0.0
+        feature_distance_to_child_y = 0.0
+        feature_distance_to_parent_y_relative = 0.0
+        feature_distance_to_child_y_relative = 0.0
+
+        if region_geometry.parent is not None:
+            parent = region_geometry.parent
+            feature_area_relative_to_parent = feature_area / parent.bbox_area
+            feature_width_relative_to_parent = region_geometry.width / parent.width
+            feature_distance_to_parent_y = max(0, min(region.ymin - parent.bbox.ymax, region.ymax - parent.bbox.ymin))
+            feature_distance_to_parent_y_relative = feature_distance_to_parent_y / page_height
+
+        if region_geometry.child is not None:
+            child = region_geometry.child
+            feature_area_relative_to_child = feature_area / child.bbox_area
+            feature_width_relative_to_child = region_geometry.width / child.width
+            feature_distance_to_child_y = max(0, min(region.ymin - child.bbox.ymax, region.ymax - child.bbox.ymin))
+            feature_distance_to_child_y_relative = feature_distance_to_child_y / page_height
 
         features = [
             feature_center_x,
@@ -111,11 +147,27 @@ class GeometryFeaturesProvider:
             feature_area_relative,
             feature_width_relative,
             feature_height_relative,
+            feature_center_x_relative,
+            feature_center_y_relative,
+            feature_xmin_relative,
+            feature_xmax_relative,
+            feature_ymin_relative,
+            feature_ymax_relative,
+            feature_number_of_predecessors,
+            feature_number_of_successors,
+            feature_area_relative_to_parent,
+            feature_area_relative_to_child,
+            feature_width_relative_to_parent,
+            feature_width_relative_to_child,
+            feature_distance_to_parent_y,
+            feature_distance_to_child_y,
+            feature_distance_to_child_y_relative,
+            feature_distance_to_parent_y_relative,
         ]
 
         return torch.tensor(features, dtype=torch.float32)
 
-def get_features(self, return_type: Optional[str]=None) -> List | np.ndarray | torch.FloatTensor:
+    def get_features(self, return_type: Optional[str]=None) -> List | np.ndarray | torch.FloatTensor:
         assert self.page_geometry, "Cannot determine features without data of the entire page"
         PLACEHOLDER_VALUE = -100.0
 

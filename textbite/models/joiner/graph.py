@@ -162,22 +162,13 @@ class JoinerGraphProvider:
     def create_edge_attr(
             self,
             edges: List[Tuple[int, int]],
-            transcriptions: List[str],
-            regions: List[AABB],
-            pagexml: PageLayout,
+            geometry: PageGeometry,
             czert_embeddings: List[Tuple[torch.FloatTensor, torch.FloatTensor]],
         ) -> List[torch.FloatTensor]:
-        geometry = PageGeometry(regions=regions, pagexml=pagexml)
-        # text_features = self.text_features_provider.get_tfidf_features(transcriptions, 256)
         edge_attrs = []
 
         for from_idx, to_idx in edges:
             edge_attr = []
-
-            # from_attrs = text_features[from_idx]
-            # to_attrs = text_features[to_idx]
-            # dist = (from_attrs - to_attrs).pow(2).sum().sqrt().item()
-            # edge_attr.append(dist)
 
             from_region = geometry.regions[from_idx]
             to_region = geometry.regions[to_idx]
@@ -237,18 +228,19 @@ class JoinerGraphProvider:
         file_basename = os.path.basename(path_img).replace(".jpg", "")
 
         transcriptions = self.get_transcriptions(all_regions, pagexml)
+        geometry = PageGeometry(regions=all_regions, pagexml=pagexml)
         czert_embeddings = []
 
         for t in transcriptions:
             czert_embedding = self.text_features_provider.get_czert_features(t)
             czert_embeddings.append(czert_embedding)
 
-        node_features = self.geometric_features_provider.get_regions_features(all_regions, pagexml)
+        node_features = self.geometric_features_provider.get_regions_features(geometry, pagexml)
 
         # edges = self.create_geometric_edges(all_regions, pagexml)
         edges = self.create_all_edges(all_regions)
 
-        edge_attr = self.create_edge_attr(edges, transcriptions, all_regions, pagexml, czert_embeddings)
+        edge_attr = self.create_edge_attr(edges, geometry, czert_embeddings)
 
         labels = self.create_labels(all_regions, edges, document)
 
