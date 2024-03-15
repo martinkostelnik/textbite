@@ -50,6 +50,7 @@ class TextFeaturesProvider:
             text,
             max_length=512,
             return_tensors="pt",
+            truncation=True,
         )
         input_ids = tokenized_text["input_ids"].to(self.device)
         token_type_ids = tokenized_text["token_type_ids"].to(self.device)

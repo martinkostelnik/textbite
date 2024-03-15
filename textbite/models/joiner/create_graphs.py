@@ -6,13 +6,16 @@ import pickle
 from ultralytics import YOLO
 import torch
 from transformers import BertModel, BertTokenizerFast
+from safe_gpu import safe_gpu
 
 from pero_ocr.document_ocr.layout import PageLayout
 
 from textbite.data_processing.label_studio import LabelStudioExport
 from textbite.models.yolo.infer import YoloBiter
 from textbite.models.joiner.graph import JoinerGraphProvider
-from textbite.utils import CZERT_PATH
+# from textbite.utils import CZERT_PATH
+
+CZERT_PATH = r"/mnt/matylda1/xkoste12/czert"
 
 
 def parse_arguments():
@@ -32,6 +35,7 @@ def main():
     args = parse_arguments()
     logging.basicConfig(level=args.logging_level, force=True)
     logging.getLogger("ultralytics").setLevel(logging.WARNING)
+    safe_gpu.claim_gpus()
 
     # Load CZERT and tokenizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -68,12 +72,12 @@ def main():
         pagexml = PageLayout(file=path_xml)
         document.map_to_pagexml(pagexml)
         bites = yolo.produce_bites(path_img, pagexml)
-        # try:
-        graph = graph_provider.get_graph_from_file(bites, path_img, pagexml, document)
-        # except RuntimeError:
-        #     bad_files += 1
-        #     logging.warning(f"Runtime error detected, skipping. (total {bad_files} bad files)")
-        #     continue
+        try:
+            graph = graph_provider.get_graph_from_file(bites, path_img, pagexml, document)
+        except RuntimeError:
+            bad_files += 1
+            logging.warning(f"Runtime error detected, skipping. (total {bad_files} bad files)")
+            continue
 
         graphs.append(graph)
 

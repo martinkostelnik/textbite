@@ -226,17 +226,17 @@ def main():
     normalizer.normalize_graphs(val_graphs_peri)
     logging.info("Train and validation data normalized.")
 
-    # logging.info("Creating normalizer ...")
-    # edge_normalizer = EdgeNormalizer(train_graphs)
-    # logging.info("Normalizer created")
+    logging.info("Creating normalizer ...")
+    edge_normalizer = EdgeNormalizer(train_graphs)
+    logging.info("Normalizer created")
 
-    # logging.info("Normalizing train data ...")
-    # edge_normalizer.normalize_graphs(train_graphs)
-    # logging.info("Normalizing validation data ...")
-    # edge_normalizer.normalize_graphs(val_graphs_book)
-    # edge_normalizer.normalize_graphs(val_graphs_dict)
-    # edge_normalizer.normalize_graphs(val_graphs_peri)
-    # logging.info("Train and validation data normalized.")
+    logging.info("Normalizing train data ...")
+    edge_normalizer.normalize_graphs(train_graphs)
+    logging.info("Normalizing validation data ...")
+    edge_normalizer.normalize_graphs(val_graphs_book)
+    edge_normalizer.normalize_graphs(val_graphs_dict)
+    edge_normalizer.normalize_graphs(val_graphs_peri)
+    logging.info("Train and validation data normalized.")
 
     # Output folders
     os.makedirs(args.save, exist_ok=True)

@@ -164,19 +164,20 @@ class JoinerGraphProvider:
             edges: List[Tuple[int, int]],
             transcriptions: List[str],
             regions: List[AABB],
+            pagexml: PageLayout,
             czert_embeddings: List[Tuple[torch.FloatTensor, torch.FloatTensor]],
         ) -> List[torch.FloatTensor]:
-        geometry = PageGeometry(regions=regions)
-        text_features = self.text_features_provider.get_tfidf_features(transcriptions, 256)
+        geometry = PageGeometry(regions=regions, pagexml=pagexml)
+        # text_features = self.text_features_provider.get_tfidf_features(transcriptions, 256)
         edge_attrs = []
 
         for from_idx, to_idx in edges:
             edge_attr = []
 
-            from_attrs = text_features[from_idx]
-            to_attrs = text_features[to_idx]
-            dist = (from_attrs - to_attrs).pow(2).sum().sqrt().item()
-            edge_attr.append(dist)
+            # from_attrs = text_features[from_idx]
+            # to_attrs = text_features[to_idx]
+            # dist = (from_attrs - to_attrs).pow(2).sum().sqrt().item()
+            # edge_attr.append(dist)
 
             from_region = geometry.regions[from_idx]
             to_region = geometry.regions[to_idx]
@@ -189,6 +190,17 @@ class JoinerGraphProvider:
             edge_attr.append(y_dist)
             edge_attr.append(dist)
 
+            edge_attr.append(x_dist / geometry.page_width)
+            edge_attr.append(y_dist / geometry.page_height)
+
+            distance_x = max(0, min(to_region.bbox.xmin - from_region.bbox.xmax, to_region.bbox.xmax - from_region.bbox.xmin))
+            distance_y = max(0, min(to_region.bbox.ymin - from_region.bbox.ymax, to_region.bbox.ymax - from_region.bbox.ymin))
+
+            edge_attr.append(distance_x)
+            edge_attr.append(distance_y)
+            edge_attr.append(distance_x / geometry.page_width)
+            edge_attr.append(distance_y / geometry.page_height)
+
             from_pooler, from_cls = czert_embeddings[from_idx]
             to_pooler, to_cls = czert_embeddings[to_idx]
 
@@ -197,6 +209,14 @@ class JoinerGraphProvider:
 
             edge_attr.append(pooler_dist)
             edge_attr.append(cls_dist)
+
+            if (from_region.child and from_region.child is to_region) or \
+               (from_region.parent and from_region.parent is to_region) or \
+               (to_region.child and to_region.child is from_region) or \
+               (to_region.parent and to_region.parent is from_region):
+                edge_attr.append(1.0)
+            else:
+                edge_attr.append(0.0)
 
             edge_attrs.append(torch.tensor(edge_attr, dtype=torch.float32))
 
@@ -228,7 +248,7 @@ class JoinerGraphProvider:
         # edges = self.create_geometric_edges(all_regions, pagexml)
         edges = self.create_all_edges(all_regions)
 
-        edge_attr = self.create_edge_attr(edges, transcriptions, all_regions, czert_embeddings)
+        edge_attr = self.create_edge_attr(edges, transcriptions, all_regions, pagexml, czert_embeddings)
 
         labels = self.create_labels(all_regions, edges, document)
 

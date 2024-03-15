@@ -13,7 +13,4 @@ test-data/
 /visualizations
 /jsons
 /inference-outputs
-yolo-results-20-02-24/
-yolo-results-02-03-24/
-yolo-models-20-02-24/
-yolo-models-02-03-24/
+yolo/
