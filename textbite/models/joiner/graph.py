@@ -30,6 +30,36 @@ class Graph:
         self.edge_attr = torch.stack(edge_attr)  # Shape (n_edges, n_features)
         self.labels = torch.tensor(labels)  # Shape (1, n_edges)
 
+    def flatten(self) -> Tuple[List[torch.FloatTensor], List[float], List[Tuple[int, int]]]:
+        edge_list = []
+        edge_index = self.edge_index.tolist()
+
+        labels = self.labels.tolist()
+        labels_to_keep = []
+
+        processed_edges = []
+
+        for i, (from_index, to_index) in enumerate(zip(edge_index[0], edge_index[1])):
+            if (to_index, from_index) in processed_edges:
+                continue
+
+            labels_to_keep.append(i)
+            
+            processed_edges.append((from_index, to_index))
+            from_features = self.node_features[from_index, :]
+            to_features = self.node_features[to_index, :]
+            edge_features = self.edge_attr[i, :]
+
+            if from_features[0].item() > to_features[0].item():
+                edge = torch.cat([from_features, to_features, edge_features])
+            else:
+                edge = torch.cat([to_features, from_features, edge_features])
+
+            edge_list.append(edge)
+
+        matched_labels = [labels[idx] for idx in labels_to_keep] if labels else None
+        return edge_list, matched_labels, processed_edges
+
     def __str__(self):
         output_str = ""
 
@@ -213,10 +243,10 @@ class JoinerGraphProvider:
 
         return edge_attrs
 
-    def get_graph_from_file(
+    def get_graph_from_bites(
         self,
         bites: List[Bite],
-        path_img: str,
+        filename: str,
         pagexml: PageLayout,
         document: Optional[AnnotatedDocument]=None, # None when running inference
     ) -> Graph:
@@ -224,8 +254,6 @@ class JoinerGraphProvider:
 
         if len(all_regions) < 2:
             raise RuntimeError("To create graph from regions, at least 2 regions must exist")
-
-        file_basename = os.path.basename(path_img).replace(".jpg", "")
 
         transcriptions = self.get_transcriptions(all_regions, pagexml)
         geometry = PageGeometry(regions=all_regions, pagexml=pagexml)
@@ -248,7 +276,7 @@ class JoinerGraphProvider:
         to_indices = [to_idx for _, to_idx in edges]
 
         graph = Graph(
-            id=file_basename,
+            id=filename,
             node_features=node_features,
             from_indices=from_indices,
             to_indices=to_indices,
@@ -265,7 +293,7 @@ if __name__ == "__main__":
     import logging
     from textbite.utils import CZERT_PATH
 
-    MODEL_PATH = r"/home/martin/textbite/yolo-models-20-02-24/yolo-s-800.pt"
+    MODEL_PATH = r"/home/martin/textbite/yolo/yolo-models-200/yolo-s-800.pt"
 
     # FILENAME = "hudba-vecneho-zivota-02"
     # IMG_PATH = r"/home/martin/textbite/data/segmentation/images/val-book/{FILENAME}.jpg"
@@ -308,6 +336,7 @@ if __name__ == "__main__":
         document=doc,
     )
 
+    asdf = graph.flatten()
     # print(graph)
     # print(graph.node_features)
     # print(f"Edges: {graph.edge_index}")

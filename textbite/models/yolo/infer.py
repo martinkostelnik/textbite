@@ -5,23 +5,18 @@ import json
 import logging
 import os.path
 from typing import List, Tuple, Optional
-from dataclasses import dataclass, field
+
+from numba.core.errors import NumbaDeprecationWarning
+import warnings
+warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 
 import xml.etree.ElementTree as ET
 from pero_ocr.document_ocr.layout import PageLayout
 from ultralytics import YOLO
 
+from textbite.bite import Bite
 from textbite.geometry import AABB, polygon_to_bbox, bbox_intersection_over_area, best_intersecting_bbox
-
 from textbite.models.improve_pagexml import PageXMLEnhancer, UnsupportedLayoutError
-
-
-@dataclass
-class Bite:
-    cls: str
-    bbox: AABB
-    lines: List[str] = field(default_factory=list)
-    name: str = ""
 
 
 def parse_arguments():
@@ -190,6 +185,8 @@ def main():
                 out_f.write(out_xml_string)
         except UnsupportedLayoutError as e:
             logging.warning(e)
+        except ValueError:
+            continue
 
 
 if __name__ == '__main__':

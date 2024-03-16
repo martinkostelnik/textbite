@@ -56,7 +56,8 @@ class TextFeaturesProvider:
         token_type_ids = tokenized_text["token_type_ids"].to(self.device)
         attention_mask = tokenized_text["attention_mask"].to(self.device)
 
-        czert_outputs = self.czert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
+        with torch.no_grad():
+            czert_outputs = self.czert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
 
         pooler_output = czert_outputs.pooler_output
         cls_output = czert_outputs.last_hidden_state[:, 0, :]
@@ -116,6 +117,7 @@ class GeometryFeaturesProvider:
         
         feature_distance_to_parent_y = 0.0
         feature_distance_to_child_y = 0.0
+        
         feature_distance_to_parent_y_relative = 0.0
         feature_distance_to_child_y_relative = 0.0
 
@@ -123,14 +125,14 @@ class GeometryFeaturesProvider:
             parent = region_geometry.parent
             feature_area_relative_to_parent = feature_area / parent.bbox_area
             feature_width_relative_to_parent = region_geometry.width / parent.width
-            feature_distance_to_parent_y = max(0, min(region.ymin - parent.bbox.ymax, region.ymax - parent.bbox.ymin))
+            feature_distance_to_parent_y = max(0.0, region.ymin - parent.bbox.ymax)
             feature_distance_to_parent_y_relative = feature_distance_to_parent_y / page_height
 
         if region_geometry.child is not None:
             child = region_geometry.child
             feature_area_relative_to_child = feature_area / child.bbox_area
-            feature_width_relative_to_child = region_geometry.width / child.width
-            feature_distance_to_child_y = max(0, min(region.ymin - child.bbox.ymax, region.ymax - child.bbox.ymin))
+            feature_width_relative_to_child = region_geometry.width / child.width   
+            feature_distance_to_child_y = max(0.0, child.bbox.ymin - region.ymax)
             feature_distance_to_child_y_relative = feature_distance_to_child_y / page_height
 
         features = [

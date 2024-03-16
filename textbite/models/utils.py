@@ -1,6 +1,18 @@
 from typing import List, Tuple, Set
+from time import perf_counter
+import pickle
+import logging
+from enum import Enum
 
 import torch
+
+from textbite.models.joiner.graph import Graph
+
+
+class ModelType(Enum):
+    GCN = 1
+    MLP = 2
+    AE = 3
 
 
 def edges_to_edge_indices(edges: List[Tuple[int, int]]) -> Tuple[List[int], List[int]]:
@@ -44,3 +56,59 @@ def get_similarities(node_features, edge_indices):
     similarities = torch.cosine_similarity(lhs_nodes, rhs_nodes, dim=1)
     similarities = torch.sigmoid(similarities)
     return similarities
+
+
+class GraphNormalizer:
+    def __init__(self, graphs: List[Graph]):
+        edge_stats_1 = torch.zeros_like(graphs[0].edge_attr[0])
+        edge_stats_2 = torch.zeros_like(graphs[0].edge_attr[0])
+        nb_edges = 0
+
+        node_stats_1 = torch.zeros_like(graphs[0].node_features[0])
+        node_stats_2 = torch.zeros_like(graphs[0].node_features[0])
+        nb_nodes = 0
+
+        for g in graphs:
+            edge_stats_1 += g.edge_attr.sum(axis=0)
+            edge_stats_2 += g.edge_attr.pow(2).sum(axis=0)
+            nb_edges += g.edge_attr.shape[0]
+
+            node_stats_1 += g.node_features.sum(axis=0)
+            node_stats_2 += g.node_features.pow(2).sum(axis=0)
+            nb_nodes += g.node_features.shape[0]
+
+        self.edge_mu = edge_stats_1 / nb_edges
+        self.edge_std = (edge_stats_2 / nb_edges - self.edge_mu.pow(2)).sqrt()
+
+        self.node_mu = node_stats_1 / nb_nodes
+        self.node_std = (node_stats_2 / nb_nodes - self.node_mu.pow(2)).sqrt()
+
+    def normalize_graphs(self, graphs: List[Graph]) -> None:
+        for g in graphs:
+            g.edge_attr = (g.edge_attr - self.edge_mu) / self.edge_std
+            g.node_features = (g.node_features - self.node_mu) / self.node_std
+
+
+def load_graphs(
+    path_train: str,
+    path_val_book: str,
+    path_val_dict: str,
+    path_val_peri: str,
+) -> Tuple[List[Graph], List[Graph], List[Graph], List[Graph]]:
+    start = perf_counter()
+    with open(path_train, "rb") as f:
+        train_data = pickle.load(f)
+
+    with open(path_val_book, "rb") as f:
+        val_data_book = pickle.load(f)
+
+    with open(path_val_dict, "rb") as f:
+        val_data_dict = pickle.load(f)
+
+    with open(path_val_peri, "rb") as f:
+        val_data_peri = pickle.load(f)
+
+    end = perf_counter()
+    logging.info(f"Train graphs: {len(train_data)} | Val graphs book: {len(val_data_book)} | Val graphs dictionary: {len(val_data_dict)} | Val graphs periodical: {len(val_data_peri)} | Took: {(end-start):.3f} s")
+
+    return train_data, val_data_book, val_data_dict, val_data_peri

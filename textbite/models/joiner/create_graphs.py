@@ -13,9 +13,7 @@ from pero_ocr.document_ocr.layout import PageLayout
 from textbite.data_processing.label_studio import LabelStudioExport
 from textbite.models.yolo.infer import YoloBiter
 from textbite.models.joiner.graph import JoinerGraphProvider
-# from textbite.utils import CZERT_PATH
-
-CZERT_PATH = r"/mnt/matylda1/xkoste12/czert"
+from textbite.utils import CZERT_PATH
 
 
 def parse_arguments():

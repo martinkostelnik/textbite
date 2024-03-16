@@ -8,15 +8,14 @@ from time import perf_counter
 import pickle
 
 import torch
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, precision_score
 
 from safe_gpu import safe_gpu
 
 from textbite.models.joiner.model import JoinerGraphModel
 from textbite.models.joiner.graph import Graph  # needed for unpickling
-from textbite.models.graph.model import NodeNormalizer, EdgeNormalizer
 from textbite.models.graph.create_graphs import collate_custom_graphs
-from textbite.models.utils import get_similarities
+from textbite.models.utils import get_similarities, GraphNormalizer, load_graphs
 
 
 def parse_arguments():
@@ -40,38 +39,12 @@ def parse_arguments():
 
     parser.add_argument("--report-interval", type=int, default=10, help="After how many updates to report")
     parser.add_argument("--save", type=str, help="Where to save the model best by validation F1")
-    parser.add_argument("--checkpoint-dir", type=str, help="Where to put all training checkpoints")
 
     args = parser.parse_args()
     return args
 
 
-def load_data(
-    path_train: str,
-    path_val_book: str,
-    path_val_dict: str,
-    path_val_peri: str,
-) -> Tuple[List[Graph], List[Graph], List[Graph], List[Graph]]:
-    start = perf_counter()
-    with open(path_train, "rb") as f:
-        train_data = pickle.load(f)
-
-    with open(path_val_book, "rb") as f:
-        val_data_book = pickle.load(f)
-
-    with open(path_val_dict, "rb") as f:
-        val_data_dict = pickle.load(f)
-
-    with open(path_val_peri, "rb") as f:
-        val_data_peri = pickle.load(f)
-
-    end = perf_counter()
-    logging.info(f"Train graphs: {len(train_data)} | Val graphs book: {len(val_data_book)} | Val graphs dictionary: {len(val_data_dict)} | Val graphs periodical: {len(val_data_peri)} | Took: {(end-start):.3f} s")
-
-    return train_data, val_data_book, val_data_dict, val_data_peri
-
-
-def evaluate(model, data, device, criterion, type: str, threshold: float):
+def evaluate(model, data, device, criterion, type: str, threshold: float) -> Tuple[float, List[int], List[int]]:
     model.eval()
 
     val_loss = 0.0
@@ -98,7 +71,7 @@ def evaluate(model, data, device, criterion, type: str, threshold: float):
     print(f"Val loss {type}: {val_loss/len(data):.4f}")
     print(classification_report(all_labels, all_predictions, digits=4))
 
-    return val_loss
+    return val_loss, all_predictions, all_labels
 
 
 def train(
@@ -113,7 +86,6 @@ def train(
         threshold: float,
         batch_size: int,
         save_path: str,
-        checkpoint_dir: str,
 ):
     model.train()
 
@@ -123,11 +95,15 @@ def train(
     criterion = torch.nn.BCELoss(reduction="sum")
 
     running_loss = 0.0
+    best_precision_sum = 0.0
     batch = []
     batch_id = 0
 
     all_similarities = []
     all_labels = []
+
+    best_model_path = os.path.join(save_path, "best-gcn-joiner.pth")
+    last_model_path = os.path.join(save_path, "last-gcn-joiner.pth")
 
     t_start = perf_counter()
     try:
@@ -176,24 +152,33 @@ def train(
                 all_labels = []
 
                 print("EVALUATION REPORT:")
-                evaluate(model, val_data_book, device, criterion, "book", threshold)
-                evaluate(model, val_data_dict, device, criterion, "dictionary", threshold)
-                evaluate(model, val_data_peri, device, criterion, "periodical", threshold)
+                _, book_predictions, book_labels = evaluate(model, val_data_book, device, criterion, "book", threshold)
+                _, dict_predictions, dict_labels = evaluate(model, val_data_dict, device, criterion, "dictionary", threshold)
+                _, peri_predictions, peri_labels = evaluate(model, val_data_peri, device, criterion, "periodical", threshold)
                 print()
                 model.train()
 
-                if checkpoint_dir:
-                    checkpoint_filename = f"{model.__class__.__name__}-joiner-checkpoint.{graph_i}.pth"
-                    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+                book_positive_precision = precision_score(book_labels, book_predictions)
+                dict_positive_precision = precision_score(dict_labels, dict_predictions)
+                peri_positive_precision = precision_score(peri_labels, peri_predictions)
+                precision_sum = book_positive_precision + dict_positive_precision + peri_positive_precision
+                if precision_sum > best_precision_sum:
+                    print(f"Found new best model with combined precision = {precision_sum:.4f} / 3.0. Saving ...")
+                    best_precision_sum = precision_sum
                     torch.save(
-                        model.dict_for_saving,
-                        checkpoint_path,
+                        {**model.dict_for_saving, "classification_threshold": threshold},
+                        best_model_path,
                     )
 
                 t_start = perf_counter()
 
     except KeyboardInterrupt:
         pass
+
+    torch.save(
+        {**model.dict_for_saving, "classification_threshold": threshold},
+        last_model_path,
+    )
 
 
 def main():
@@ -211,11 +196,12 @@ def main():
 
     # Data
     logging.info("Loading data ...")
-    train_graphs, val_graphs_book, val_graphs_dict, val_graphs_peri = load_data(args.train, args.val_book, args.val_dict, args.val_peri)
+    train_graphs, val_graphs_book, val_graphs_dict, val_graphs_peri = load_graphs(args.train, args.val_book, args.val_dict, args.val_peri)
     logging.info(f"Data loaded.")
 
+    # Normalizer
     logging.info("Creating normalizer ...")
-    normalizer = NodeNormalizer(train_graphs)
+    normalizer = GraphNormalizer(train_graphs)
     logging.info("Normalizer created")
 
     logging.info("Normalizing train data ...")
@@ -226,22 +212,8 @@ def main():
     normalizer.normalize_graphs(val_graphs_peri)
     logging.info("Train and validation data normalized.")
 
-    logging.info("Creating normalizer ...")
-    edge_normalizer = EdgeNormalizer(train_graphs)
-    logging.info("Normalizer created")
-
-    logging.info("Normalizing train data ...")
-    edge_normalizer.normalize_graphs(train_graphs)
-    logging.info("Normalizing validation data ...")
-    edge_normalizer.normalize_graphs(val_graphs_book)
-    edge_normalizer.normalize_graphs(val_graphs_dict)
-    edge_normalizer.normalize_graphs(val_graphs_peri)
-    logging.info("Train and validation data normalized.")
-
     # Output folders
     os.makedirs(args.save, exist_ok=True)
-    if args.checkpoint_dir:
-        os.makedirs(args.checkpoint_dir, exist_ok=True)
 
     logging.info("Saving normalizer ...")
     with open(os.path.join(args.save, "normalizer.pkl"), 'wb') as f:
@@ -251,9 +223,11 @@ def main():
     # Model
     logging.info("Creating model ...")
     input_size = train_graphs[0].node_features.size(dim=1)
+    edge_dim = train_graphs[0].edge_attr.size(dim=1)
     model = JoinerGraphModel(
         device=device,
         input_size=input_size,
+        edge_dim=edge_dim,
         output_size=args.output_size,
         n_layers=args.layers,
         hidden_size=args.hidden_width,
@@ -278,7 +252,6 @@ def main():
         threshold=args.threshold,
         batch_size=args.batch_size,
         save_path=args.save,
-        checkpoint_dir=args.checkpoint_dir,
     )
     end = perf_counter()
     t = end - start
