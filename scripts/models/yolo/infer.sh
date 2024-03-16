@@ -12,7 +12,7 @@ SCRIPTS_DIR=$BASE/textbite/models/yolo
 IMG_PATH=$BASE/data/segmentation/images/test
 XML_PATH=$BASE/data/segmentation/xmls/test
 ALTO_PATH=$BASE/data/segmentation/altos
-MODEL_PATH=$BASE/yolo-models/yolo-s-1000.pt
+MODEL_PATH=$BASE/yolo/yolo-models-200/yolo-s-800.pt
 SAVE_PATH=$BASE/yoloinference
 
 python -u $SCRIPTS_DIR/infer.py \

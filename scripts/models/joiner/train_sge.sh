@@ -31,5 +31,4 @@ python -u $SCRIPTS_DIR/train.py \
     --lr 5e-3 \
     --batch-size 64 \
     --report-interval 50 \
-    --save $SAVE_PATH \
-    --checkpoint-dir $SAVE_PATH
+    --save $SAVE_PATH

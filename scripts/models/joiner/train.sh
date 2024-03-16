@@ -24,12 +24,11 @@ python -u $SCRIPTS_DIR/train.py \
     --val-dict $DATA_PATH_VAL_DICT \
     --val-peri $DATA_PATH_VAL_PERI \
     -l 3 \
-    -n 256 \
-    -o 256 \
-    -d 0.2 \
+    -n 128 \
+    -o 128 \
+    -d 0.0 \
     --threshold 0.71 \
     --lr 5e-3 \
     --batch-size 64 \
     --report-interval 50 \
-    --save $SAVE_PATH \
-    --checkpoint-dir $SAVE_PATH
+    --save $SAVE_PATH

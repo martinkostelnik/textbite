@@ -11,8 +11,8 @@ source $BASE/../semant/venv/bin/activate
 SCRIPTS_DIR=$BASE/textbite/models/joiner
 XML_PATH=$BASE/data/segmentation/xmls/test
 IMG_PATH=$BASE/data/segmentation/images/test
-YOLO_PATH=$BASE/yolo-models-20-02-24/yolo-s-1000.pt
-MODEL_PATH=$BASE/joiner-models/JoinerGraphModel-joiner-checkpoint.159.pth
+YOLO_PATH=$BASE/yolo/yolo-models-200/yolo-s-800.pt
+MODEL_PATH=$BASE/joiner-models/best-joiner.pth
 NORMALIZER_PATH=$BASE/joiner-models/normalizer.pkl
 SAVE_PATH=$BASE/joinerinference
 

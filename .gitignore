@@ -13,4 +13,6 @@ test-data/
 /visualizations
 /jsons
 /inference-outputs
-yolo/
+/yolo/
+joiner-models/
+
