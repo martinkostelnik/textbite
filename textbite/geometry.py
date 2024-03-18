@@ -26,12 +26,32 @@ def dist_l2(p1: Point, p2: Point) -> float:
     return sqrt(dx*dx + dy*dy)
 
 
+def bbox_dist_y(bbox1: AABB, bbox2: AABB) -> float:
+    bbox1_center_y = bbox_center(bbox1).y
+    bbox2_center_y = bbox_center(bbox2).y
+
+    bbox1_half_height = bbox1.ymax - bbox1_center_y
+    bbox2_half_height = bbox2.ymax - bbox2_center_y
+
+    return max(0.0, abs(bbox1_center_y - bbox2_center_y) - bbox1_half_height - bbox2_half_height)
+
+
 def polygon_to_bbox(polygon: np.ndarray) -> AABB:
     mins = np.min(polygon, axis=0)
     maxs = np.max(polygon, axis=0)
 
     # (minx, miny, maxx, maxy)
-    return AABB(mins[0], mins[1], maxs[0], maxs[1])
+    return AABB(int(mins[0]), int(mins[1]), int(maxs[0]), int(maxs[1]))
+
+
+def enclosing_bbox(bboxes: List[AABB]) -> AABB:
+    xmins = [bbox.xmin for bbox in bboxes]
+    xmaxs = [bbox.xmax for bbox in bboxes]
+    ymins = [bbox.ymin for bbox in bboxes]
+    ymaxs = [bbox.ymax for bbox in bboxes]
+
+    bbox = AABB(min(xmins), max(xmaxs), min(ymins), max(ymaxs))
+    return bbox
 
 
 def bbox_center(bbox: AABB) -> Point:
@@ -417,6 +437,29 @@ class PageGeometry:
         if not self.lines or len(self.lines) == 0:
             raise ValueError("No lines exist in this PageGeometry.")
         return sum(line.get_height() for line in self.lines) / len(self.lines)
+    
+    @property
+    def line_heads(self) -> List[LineGeometry]:
+        return [line_geometry for line_geometry in self.lines if line_geometry.parent is None]
+    
+    @property
+    def avg_line_distance_y(self) -> float:
+        processed_pairs = []
+        distance_sum = 0.0
+
+        for line_geometry in self.lines:
+            if line_geometry.parent is not None:
+                if set([line_geometry, line_geometry.parent]) not in processed_pairs:
+                    distance_sum += bbox_dist_y(line_geometry.bbox, line_geometry.parent.bbox)
+                    processed_pairs.append(set([line_geometry, line_geometry.parent]))
+
+            if line_geometry.child is not None:
+                if set([line_geometry, line_geometry.child]) not in processed_pairs:
+                    distance_sum += bbox_dist_y(line_geometry.bbox, line_geometry.child.bbox)
+                    processed_pairs.append(set([line_geometry, line_geometry.child]))
+
+        return distance_sum / len(processed_pairs)
+
 
     def set_line_neighbourhoods(self, max_neighbours: int=10) -> None:
         cached_distances = {}
@@ -433,6 +476,63 @@ class PageGeometry:
         for region in self.regions:
             other_regions = [r for r in self.regions if r is not region]
             region.set_visibility(other_regions)
+
+    def split_geometry(self) -> None:
+        for line_geometry in self.lines:
+            # If line is a parent to multiple lines, sever all the connections
+            children = [potentional_child for potentional_child in self.lines if potentional_child.parent is line_geometry]
+            if len(children) >= 2:
+                line_geometry.child = None
+                for child in children:
+                    child.parent = None
+
+            # If line a child of multiple lines, sever all
+            parents = [potentional_parent for potentional_parent in self.lines if potentional_parent.child is line_geometry]
+            if len(parents) >= 2:
+                line_geometry.parent = None
+                for parent in parents:
+                    parent.child = None
+
+            # If line A has a child B and there exist a different line C, whose parent is A, sever all
+            if line_geometry.child is not None:
+                for potentional_child in self.lines:
+                    if potentional_child is line_geometry.child:
+                        continue
+
+                    if potentional_child.parent is line_geometry:
+                        line_geometry.child = None
+                        potentional_child.parent = None
+
+            # If line A has parent B and there exists a different line C, whose child is A, sever all
+            if line_geometry.parent is not None:
+                for potentional_parent in self.lines:
+                    if potentional_parent is line_geometry.parent:
+                        continue
+
+                    if potentional_parent.child is line_geometry:
+                        line_geometry.parent = None
+                        potentional_parent.child = None
+
+        for line_geometry in self.lines:
+            if line_geometry.parent is not None:
+                if line_geometry.parent.child is None:
+                    line_geometry.parent = None
+
+            if line_geometry.child is not None:
+                if line_geometry.child.parent is None:
+                    line_geometry.child = None
+
+        for line_geometry in self.lines:
+            if line_geometry.parent is not None:
+                if line_geometry.parent.child is not line_geometry:
+                    line_geometry.parent.child = None
+                    line_geometry.parent = None
+
+            if line_geometry.child is not None:
+                if line_geometry.child.parent is not line_geometry:
+                    line_geometry.child.parent = None
+                    line_geometry.child = None
+
 
     def __str__(self) -> str:
         output_str = f"PageGeometry object"

@@ -1,21 +1,24 @@
 #!/bin/bash
 
 # Author: Martin Kostelník
-# Brief: Infer XML files.
-# Date: 04.12.2023
+# Brief: Infer XML files using bert-like language model.
+# Date: 17.03.2024
 
 BASE=/home/martin/textbite
 
-source $BASE/../semant/venv/bin/activate
+source $BASE/venv-old-transformers/bin/activate
 
 SCRIPTS_DIR=$BASE/textbite/models/baseline
-XML_DATA=$BASE/tmp
-LANGUAGE_MODEL=$BASE/models/lm72.pth
-MODEL=$BASE/models/BaselineModel.pth
-OUT_DIR=$BASE/inference-outputs
+XML_PATH=$BASE/data/segmentation/xmls/test
+MODEL_PATH=$BASE/models/lm264.pth
+SAVE_PATH=$BASE/baseline-inference
+
+mkdir -p $SAVE_PATH
 
 python -u $SCRIPTS_DIR/infer.py \
-    --data $XML_DATA \
-    --lm $LANGUAGE_MODEL \
-    --model $MODEL \
-    --save $OUT_DIR
+    --logging-level INFO \
+    --xmls $XML_PATH \
+    --model $MODEL_PATH \
+    --threshold 0.005 \
+    --method dist \
+    --save $SAVE_PATH

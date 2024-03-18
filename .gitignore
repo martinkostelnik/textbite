@@ -15,4 +15,4 @@ test-data/
 /inference-outputs
 /yolo/
 joiner-models/
-
+/venv-old-transformers/

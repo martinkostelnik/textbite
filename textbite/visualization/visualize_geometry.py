@@ -22,6 +22,7 @@ def parse_arguments():
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--images", required=True, type=str, help="Path to a folder with images.")
     parser.add_argument("--xml", required=True, type=str, help="Path to a folder with xmls.")
+    parser.add_argument("--split", action="store_true", help="Split geometry into cohesive pieces.")
     parser.add_argument("--save", required=True, type=str, help="Path to the output folder.")
 
     args = parser.parse_args()
@@ -62,6 +63,9 @@ def main():
             logging.warning(f"XML file corresponding to image {image_filename} not found. Skipping.")
             continue
         
+        if args.split:
+            geometry.split_geometry()
+
         img = render_geometry(img, geometry)
         save_path = os.path.join(args.save, image_filename.replace(".jpg", "-geometry.jpg"))
         cv2.imwrite(save_path, img)

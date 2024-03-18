@@ -19,7 +19,7 @@ from textbite.models.MLP import MLP
 from textbite.models.autoencoder import AutoEncoder
 from textbite.models.utils import edge_indices_to_edges, get_transitive_subsets, GraphNormalizer, get_similarities, ModelType
 from textbite.utils import CZERT_PATH
-from textbite.bite import load_bites, Bite
+from textbite.bite import load_bites, Bite, save_bites
 
 
 def parse_arguments():
@@ -163,11 +163,6 @@ def join_bites(
     return new_bites
 
 
-def save_result(result: List[Bite], path: str) -> None:
-    with open(path, "w") as f:
-        json.dump([bite.__dict__ for bite in result], f, indent=4, ensure_ascii=False)
-
-
 def main():
     args = parse_arguments()
     logging.basicConfig(level=args.logging_level, force=True)
@@ -225,7 +220,6 @@ def main():
 
     logging.info("Starting inference ...")
     for i, json_filename in enumerate(json_filenames):
-        img_filename = json_filename.replace(".json", ".jpg")
         xml_filename = json_filename.replace(".json", ".xml")
         filename = json_filename.replace(".json", "")
 
@@ -250,10 +244,10 @@ def main():
                 threshold,
             )
         except RuntimeError:
-            logging.info(f"Single region detected on {img_filename}, saving as is.")
+            logging.info(f"Single region detected on {xml_filename}, saving as is.")
             new_bites = original_bites
 
-        save_result(new_bites, save_path)
+        save_bites(new_bites, save_path)
 
 
 if __name__ == '__main__':
