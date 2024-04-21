@@ -15,7 +15,7 @@ import torch
 from textbite.language_model import create_language_model
 from textbite.geometry import PageGeometry, LineGeometry, enclosing_bbox, bbox_dist_y
 from textbite.bite import Bite, save_bites
-
+from textbite.utils import CZERT_PATH
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -23,6 +23,8 @@ def parse_arguments():
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--xmls", required=True, type=str, help="Path to a folder with xml data.")
     parser.add_argument("--model", type=str, help="Path to the .pt file with weights of language model.")
+    parser.add_argument("--czert", type=str, default=CZERT_PATH, help="Path to the .pt file with weights of language model.")
+    parser.add_argument("--tokenizer", default=CZERT_PATH, type=str, help="Path to the tokenizer.")
     parser.add_argument("--threshold", type=float, default=0.5, help="Classification threshold.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
     parser.add_argument("--method", choices=["lm", "dist", "base"], default="base", help="One of [method, dist, base].")
@@ -48,7 +50,15 @@ def lm_forward(top_line: LineGeometry, bot_line: LineGeometry, threshold: float,
     top_text = top_line.text_line.transcription.strip()
     bot_text = bot_line.text_line.transcription.strip()
 
-    tokenized = tokenizer(top_text, bot_text)
+    # tokenized = tokenizer(top_text, bot_text)
+    tokenized = tokenizer(
+        top_text,
+        bot_text,
+        max_length=128,
+        truncation=True,
+        padding="max_length",
+        return_tensors="pt",
+    )
 
     input_ids = tokenized["input_ids"].to(device)
     attention_mask = tokenized["attention_mask"].to(device)
@@ -131,14 +141,23 @@ def main():
     method = SplitMethod(args.method)
 
     if method == SplitMethod.LM:
+        from transformers import BertTokenizerFast, BertModel, BertConfig
+        from textbite.models.baseline.finetune_czert import NSPModel
         safe_gpu.claim_gpus()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logging.info(f"Inference running on {device}")
 
         logging.info("Loading language model ...")
-        tokenizer, bert = create_language_model(device, args.model)
-        bert.eval()
-        bert = bert.to(device)
+        # tokenizer, bert = create_language_model(device, args.model)
+        # tokenizer = BertTokenizer
+        # bert.eval()
+        # bert = bert.to(device)
+        tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer)
+        checkpoint = torch.load(args.model)
+        czert = BertModel.from_pretrained(args.czert)
+        czert.load_state_dict(checkpoint["czert_state_dict"])
+        model = NSPModel(device, czert)
+        model.cls.load_state_dict(checkpoint["cls_state_dict"])
         logging.info("Language model loaded.")
 
         threshold = args.threshold
