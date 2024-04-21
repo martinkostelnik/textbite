@@ -3,8 +3,11 @@ import os
 import logging
 from typing import List
 from enum import Enum
-from functools import partial
 from itertools import pairwise
+
+from numba.core.errors import NumbaDeprecationWarning
+import warnings
+warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 
 from safe_gpu import safe_gpu
 import torch
@@ -19,7 +22,7 @@ def parse_arguments():
 
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--xmls", required=True, type=str, help="Path to a folder with xml data.")
-    parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weights of Joiner model.")
+    parser.add_argument("--model", type=str, help="Path to the .pt file with weights of language model.")
     parser.add_argument("--threshold", type=float, default=0.5, help="Classification threshold.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
     parser.add_argument("--method", choices=["lm", "dist", "base"], default="base", help="One of [method, dist, base].")
@@ -41,7 +44,7 @@ def create_bite(lines: List[LineGeometry]) -> Bite:
     return Bite("text", bbox, lines_ids)
 
 
-def lm_forward(top_line: LineGeometry, bot_line: LineGeometry, lm, tokenizer, device) -> float:
+def lm_forward(top_line: LineGeometry, bot_line: LineGeometry, threshold: float, lm, tokenizer, device) -> bool:
     top_text = top_line.text_line.transcription.strip()
     bot_text = bot_line.text_line.transcription.strip()
 
@@ -55,11 +58,11 @@ def lm_forward(top_line: LineGeometry, bot_line: LineGeometry, lm, tokenizer, de
         bert_output = lm(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
     probability = bert_output.nsp_output.cpu().item()
-    return probability
+    return probability < threshold
 
 
-def dist_forward(top_line: LineGeometry, bot_line: LineGeometry) -> float:
-    return bbox_dist_y(top_line.bbox, bot_line.bbox)
+def dist_forward(top_line: LineGeometry, bot_line: LineGeometry, threshold: float) -> bool:
+    return bbox_dist_y(top_line.bbox, bot_line.bbox) > threshold
 
 
 def get_base_bites(geometry: PageGeometry) -> List[Bite]:
@@ -76,19 +79,24 @@ def get_base_bites(geometry: PageGeometry) -> List[Bite]:
 def get_split_bites(
         geometry: PageGeometry,
         threshold: float,
-        dist_fn,
+        break_predicate,
         **kwargs,
     ) -> List[Bite]:
     bites = []
     for head_line in geometry.line_heads:
         column = [head_line] + [line for line in head_line.children_iterator()]
+
+        if len(column) == 1:
+            bites.append(create_bite(column))
+
         lines: List[LineGeometry] = []
 
         for top_line, bot_line in pairwise(column):
             top_text = top_line.text_line.transcription.strip()
             bot_text = bot_line.text_line.transcription.strip()
 
-            lines.append(top_line)
+            if top_line not in lines:
+                lines.append(top_line)
 
             if top_text == "":
                 if top_line not in lines:
@@ -100,17 +108,19 @@ def get_split_bites(
                     lines.append(bot_line)
                 continue
 
-            dist = dist_fn(top_line, bot_line, **kwargs)
-
-            if dist < threshold: # Break the bite
+            if break_predicate(top_line, bot_line, threshold, **kwargs): # Break the bite
                 bite = create_bite(lines)
                 bites.append(bite)
-                lines = []
+                lines = [bot_line]
+            else:
+                if bot_line not in lines:
+                    lines.append(bot_line)
 
         if lines:
             bite = create_bite(lines)
             bites.append(bite)
 
+    assert len(geometry.lines) == sum([len(bite.lines) for bite in bites])
     return bites
 
 
@@ -154,7 +164,7 @@ def main():
                 bites = get_base_bites(geometry)
 
             case SplitMethod.DIST:
-                threshold = geometry.avg_line_distance_y
+                threshold = geometry.avg_line_distance_y * args.threshold
                 bites = get_split_bites(geometry, threshold, dist_forward)
 
             case SplitMethod.LM:

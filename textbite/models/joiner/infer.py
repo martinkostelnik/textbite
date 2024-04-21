@@ -4,7 +4,6 @@ import argparse
 import logging
 import os.path
 from typing import List, Tuple, Dict
-import json
 import pickle
 
 from safe_gpu import safe_gpu

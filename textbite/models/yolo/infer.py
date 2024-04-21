@@ -13,6 +13,7 @@ warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 import xml.etree.ElementTree as ET
 from pero_ocr.document_ocr.layout import PageLayout
 from ultralytics import YOLO
+from safe_gpu import safe_gpu
 
 from textbite.bite import Bite
 from textbite.geometry import AABB, polygon_to_bbox, bbox_intersection_over_area, best_intersecting_bbox
@@ -156,6 +157,7 @@ def main():
     args = parse_arguments()
     logging.basicConfig(level=args.logging_level)
     logging.getLogger("ultralytics").setLevel(logging.WARNING)
+    safe_gpu.claim_gpus()
 
     biter = YoloBiter(YOLO(args.model))
     xml_enhancer = PageXMLEnhancer()

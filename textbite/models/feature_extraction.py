@@ -7,7 +7,7 @@ from transformers import BertTokenizerFast, BertModel
 
 from pero_ocr.document_ocr.layout import PageLayout
 
-from textbite.geometry import bbox_area, bbox_center, dist_l2, PageGeometry, RegionGeometry
+from textbite.geometry import dist_l2, PageGeometry, RegionGeometry
 
 
 class TextFeaturesProvider:

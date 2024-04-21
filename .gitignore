@@ -16,3 +16,9 @@ test-data/
 /yolo/
 joiner-models/
 /venv-old-transformers/
+backup/
+/joiner-inference-mlp/
+/joiner-inference/
+/joiner-inference-val/
+/yolo-inference/
+/yolo-inference-val/
