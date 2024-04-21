@@ -10,8 +10,9 @@ source $BASE/venv/bin/activate
 
 SCRIPTS_DIR=$BASE/textbite/textbite/models/baseline
 XML_PATH=$BASE/textbite-data/xmls/test
-MODEL_PATH=$BASE/czerts/nsp-best-czert.pth
+MODEL_PATH=$BASE/czerts/best-nsp-czert.pth
 SAVE_PATH=$BASE/baseline-inference-lm
+CZERT_PATH=$BASE/czert
 
 mkdir -p $SAVE_PATH
 
@@ -21,4 +22,6 @@ python -u $SCRIPTS_DIR/infer.py \
     --model $MODEL_PATH \
     --threshold 0.5 \
     --method lm \
-    --save $SAVE_PATH
+    --save $SAVE_PATH \
+    --czert $CZERT_PATH \
+    --tokenizer $CZERT_PATH

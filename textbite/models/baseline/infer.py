@@ -4,6 +4,7 @@ import logging
 from typing import List
 from enum import Enum
 from itertools import pairwise
+from time import perf_counter
 
 from numba.core.errors import NumbaDeprecationWarning
 import warnings
@@ -67,7 +68,7 @@ def lm_forward(top_line: LineGeometry, bot_line: LineGeometry, threshold: float,
     with torch.no_grad():
         bert_output = lm(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
-    probability = bert_output.nsp_output.cpu().item()
+    probability = torch.sigmoid(bert_output).cpu().item()
     return probability < threshold
 
 
@@ -158,6 +159,8 @@ def main():
         czert.load_state_dict(checkpoint["czert_state_dict"])
         model = NSPModel(device, czert)
         model.cls.load_state_dict(checkpoint["cls_state_dict"])
+        model = model.to(device)
+        model.eval()
         logging.info("Language model loaded.")
 
         threshold = args.threshold
@@ -167,6 +170,7 @@ def main():
     logging.info("Save directory created.")
 
     xml_filenames = [xml_filename for xml_filename in os.listdir(args.xmls) if xml_filename.endswith(".xml")]
+    total_time_s = 0.0
 
     for i, xml_filename in enumerate(xml_filenames):
         json_filename = xml_filename.replace(".xml", ".json")
@@ -175,6 +179,7 @@ def main():
 
         logging.info(f"({i}/{len(xml_filenames)}) | Processing: {path_xml}")
 
+        start = perf_counter()
         geometry = PageGeometry(path=path_xml)
         geometry.split_geometry()
 
@@ -187,12 +192,17 @@ def main():
                 bites = get_split_bites(geometry, threshold, dist_forward)
 
             case SplitMethod.LM:
-                bites = get_split_bites(geometry, threshold, lm_forward, lm=bert, tokenizer=tokenizer, device=device)
+                bites = get_split_bites(geometry, threshold, lm_forward, lm=model, tokenizer=tokenizer, device=device)
 
             case _:
                 raise ValueError("Invalid split method detected.")
+            
+        end = perf_counter
+        total_time_s += (end - start)
 
         save_bites(bites, save_path)
+
+    print(f"Inference took: {total_time_s} s | Avg per file: {total_time_s / len(xml_filenames)}")
 
 
 if __name__ == "__main__":
