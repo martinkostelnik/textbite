@@ -74,7 +74,7 @@ def main():
     logging.basicConfig(level=args.logging_level, force=True)
 
     export = LabelStudioExport(path=args.export)
-    tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
+    tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer)
 
     data = []
 
