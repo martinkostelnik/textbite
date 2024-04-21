@@ -10,6 +10,7 @@ source $BASE/venv/bin/activate
 
 SCRIPTS_DIR=$BASE/textbite/textbite/models/baseline
 DATA_PATH=$BASE/textbite-data/nsp-data
+MODEL_PATH=$BASE/czert
 SAVE_PATH=$BASE/czerts
 FILENAME=data-train.pkl
 
@@ -19,6 +20,7 @@ python -u $SCRIPTS_DIR/finetune_czert.py \
     --logging-level INFO \
     --data $DATA_PATH \
     --save $SAVE_PATH \
+    --model $MODEL_PATH \
     --lr 1e-3 \
     --epochs 2 \
     --batch-size 32
