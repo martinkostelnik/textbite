@@ -197,7 +197,7 @@ def main():
             case _:
                 raise ValueError("Invalid split method detected.")
             
-        end = perf_counter
+        end = perf_counter()
         total_time_s += (end - start)
 
         save_bites(bites, save_path)
