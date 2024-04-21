@@ -18,8 +18,8 @@ mkdir -p $SAVE_PATH
 
 python -u $SCRIPTS_DIR/create_lm_dataset.py \
     --logging-level INFO \
-    --json $JSON_PATH \
     --xmls $XML_PATH \
+    --tokenizer $BASE/czert \
     --export $JSON_PATH \
     --save $SAVE_PATH \
     --filename $FILENAME
@@ -29,8 +29,8 @@ FILENAME=data-val.pkl
 
 python -u $SCRIPTS_DIR/create_lm_dataset.py \
     --logging-level INFO \
-    --json $JSON_PATH \
     --xmls $XML_PATH \
+    --tokenizer $BASE/czert \
     --export $JSON_PATH \
     --save $SAVE_PATH \
     --filename $filename

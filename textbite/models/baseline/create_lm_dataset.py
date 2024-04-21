@@ -23,6 +23,7 @@ def parse_arguments():
 
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--xmls", required=True, type=str, help="Path to a folder with xml data.")
+    parser.add_argument("--tokenizer", default=CZERT_PATH, type=str, help="Path to a tokenizer.")
     parser.add_argument("--export", required=True, type=str, help="Path to the Label-Studio export.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output pickles.")
     parser.add_argument("--filename", required=True, type=str, help="Output file name.")
