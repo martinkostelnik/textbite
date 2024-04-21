@@ -78,11 +78,10 @@ def load_data(path: str):
         with open(p, "rb") as f:
             if filename.startswith("val"):
                 val_data = pickle.load(f)
-                train_data = val_data
+                # train_data = val_data
 
-            # if filename.startswith("train"):
-            # if filename == "train-tokenized-1.pkl":
-                # train_data.extend(pickle.load(f))
+            if filename.startswith("train"):
+                train_data.extend(pickle.load(f))
 
     return Dataset(train_data), Dataset(val_data)
 
@@ -109,15 +108,15 @@ def evaluate(
     all_labels = []
 
     for batch in loader:
+        labels = batch.data["label"].to(device, dtype=torch.float32)
+
         with torch.no_grad():
             logits = forward(model, device, batch)
             probs = torch.sigmoid(logits)
             val_loss += criterion(probs, labels)
 
-        labels = batch.data["label"].to(device, dtype=torch.float32)
-            
-        all_predictions.append((probs > 0.5).cpu().squeeze().item())
-        all_labels.append(labels.cpu().squueze().item())
+        all_predictions.extend((probs > 0.5).cpu().squeeze())
+        all_labels.extend(labels.cpu().squeeze())
 
     print(f"Val loss: {val_loss/len(all_labels):.4f}")
     print(classification_report(all_labels, all_predictions, digits=4))
@@ -141,7 +140,6 @@ def train(
 
     best_val_f1 = 0.0
     best_model_path = os.path.join(save_path, "best-nsp-czert.pth")
-    last_model_path = os.path.join(save_path, "last-nsp-czert.pth")
 
     for epoch in range(epochs):
         model.train()
@@ -164,26 +162,23 @@ def train(
             epoch_labels.extend(labels.cpu().squeeze().tolist())
             epoch_predictions.extend((probs > 0.5).cpu().squeeze().tolist())
 
-        print(f"Epoch {epoch+1} finished.")
-        print("TRAIN REPORT:")
-        print(classification_report(epoch_labels, epoch_predictions, digits=4))
+            if (batch_index + 1) % 100 == 0:
+                print("TRAIN REPORT:")
+                print(classification_report(epoch_labels, epoch_predictions, digits=4))
+                epoch_labels = []
+                epoch_predictions = []
 
-        print("EVALUATION REPORT:")
-        _, val_predictions, val_labels = evaluate(model, val_dataloader, device, criterion)
-        val_f1 = f1_score(val_labels, val_predictions)
+                print("EVALUATION REPORT:")
+                _, val_predictions, val_labels = evaluate(model, val_dataloader, device, criterion)
+                val_f1 = f1_score(val_labels, val_predictions)
 
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
-            print(f"Found new best model at F1 = {best_val_f1:.4f}, SAVING")
-            torch.save(
-                model.dict_for_saving,
-                last_model_path,
-            )
-
-        torch.save(
-            model.dict_for_saving,
-            last_model_path,
-        )
+                if val_f1 > best_val_f1:
+                    best_val_f1 = val_f1
+                    print(f"Found new best model at F1 = {best_val_f1:.4f}, SAVING")
+                    torch.save(
+                        model.dict_for_saving,
+                        best_model_path,
+                    )
 
 
 def main():
@@ -208,7 +203,7 @@ def main():
     logging.info("Data loaded.")
 
     logging.info("Creating dataloaders ...")
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size)
     logging.info("Loaders created.")
 
