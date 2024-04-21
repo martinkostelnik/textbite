@@ -8,6 +8,7 @@ import pickle
 
 from safe_gpu import safe_gpu
 import torch
+from time import perf_counter
 from transformers import BertTokenizerFast, BertModel
 
 from pero_ocr.document_ocr.layout import PageLayout
@@ -217,6 +218,7 @@ def main():
 
     json_filenames = [filename for filename in os.listdir(args.data) if filename.endswith(".json")]
 
+    total_time_s = 0.0
     logging.info("Starting inference ...")
     for i, json_filename in enumerate(json_filenames):
         xml_filename = json_filename.replace(".json", ".xml")
@@ -228,6 +230,7 @@ def main():
 
         logging.info(f"({i}/{len(json_filenames)}) | Processing: {path_json}")
 
+        start = perf_counter()
         pagexml = PageLayout(file=path_xml)
         original_bites = load_bites(path_json)
 
@@ -245,9 +248,12 @@ def main():
         except RuntimeError:
             logging.info(f"Single region detected on {xml_filename}, saving as is.")
             new_bites = original_bites
+        end = perf_counter()
+        total_time_s += (end - start)
 
         save_bites(new_bites, save_path)
 
+    print(f"Avg time: {total_time_s / len(json_filenames)}")
 
 if __name__ == '__main__':
     main()
