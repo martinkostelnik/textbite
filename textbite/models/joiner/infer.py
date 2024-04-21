@@ -30,6 +30,7 @@ def parse_arguments():
     parser.add_argument("--xmls", required=True, type=str, help="Path to a folder with xml data.")
     parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weights of Joiner model.")
     parser.add_argument("--normalizer", required=True, type=str, help="Path to node normalizer.")
+    parser.add_argument("--czert", default=CZERT_PATH, type=str, help="Path to CZERT.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
 
     return parser.parse_args()
@@ -178,10 +179,10 @@ def main():
     logging.info("Model checkpoint loaded.")
 
     logging.info("Loading language model ...")
-    tokenizer = BertTokenizerFast.from_pretrained(CZERT_PATH)
+    tokenizer = BertTokenizerFast.from_pretrained(args.czert)
     logging.info("Tokenizer loaded.")
     logging.info("Loading CZERT ...")
-    czert = BertModel.from_pretrained(CZERT_PATH)
+    czert = BertModel.from_pretrained(args.czert)
     czert = czert.to(device)
     logging.info("Language model loaded.")
 
