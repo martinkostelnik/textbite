@@ -46,6 +46,7 @@ def process_document(annotated_doc: AnnotatedDocument, tokenizer: BertTokenizerF
                 bot_text,
                 max_length=128,
                 truncation=True,
+                padding="max_length",
                 return_tensors="pt",
             )
             tokenized_text["label"] = torch.tensor([1])
@@ -60,6 +61,7 @@ def process_document(annotated_doc: AnnotatedDocument, tokenizer: BertTokenizerF
                 bot_line_negative_text,
                 max_length=128,
                 truncation=True,
+                padding="max_length",
                 return_tensors="pt",
             )
             tokenized_text["label"] = torch.tensor([0])
@@ -77,13 +79,14 @@ def main():
     tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer)
 
     data = []
-    file_idx = 1
+    pkl_file_idx = 1
+    files_processed = 0
 
     for idx, annotated_doc in enumerate(export.documents):
         xml_filename = annotated_doc.filename.replace(".jpg", ".xml")
         xml_path = os.path.join(args.xmls, xml_filename)
         
-        logging.info(f"{idx}/{len(export.documents)} | Processing {xml_path}.")
+        logging.debug(f"{idx}/{len(export.documents)} | Processing {xml_path}.")
 
         try:
             pagexml = PageLayout(file=xml_path)
@@ -92,16 +95,23 @@ def main():
             continue
 
         annotated_doc.map_to_pagexml(pagexml=pagexml)
+        files_processed += 1
 
         document_results = process_document(annotated_doc=annotated_doc, tokenizer=tokenizer)
         data.extend(document_results)
 
-        if (idx + 1) % 500 == 0:
-            save_path = os.path.join(args.save, args.filename.replace(".pkl", f"-{file_idx}.pkl"))
+        if files_processed % 500 == 0:
+            save_path = os.path.join(args.save, args.filename.replace(".pkl", f"-{pkl_file_idx}.pkl"))
+            logging.info(f"({files_processed}) | Saving {save_path}")
             with open(save_path, "wb") as f:
                 pickle.dump(data, f)
             data = []
-            file_idx += 1
+            pkl_file_idx += 1
+
+    save_path = os.path.join(args.save, args.filename.replace(".pkl", f"-{pkl_file_idx}.pkl"))
+    logging.info(f"Saving {save_path}")
+    with open(save_path, "wb") as f:
+        pickle.dump(data, f)
 
 
 if __name__ == "__main__":
