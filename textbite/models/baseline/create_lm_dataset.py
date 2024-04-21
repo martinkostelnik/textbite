@@ -77,6 +77,7 @@ def main():
     tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer)
 
     data = []
+    file_idx = 1
 
     for idx, annotated_doc in enumerate(export.documents):
         xml_filename = annotated_doc.filename.replace(".jpg", ".xml")
@@ -95,9 +96,12 @@ def main():
         document_results = process_document(annotated_doc=annotated_doc, tokenizer=tokenizer)
         data.extend(document_results)
 
-    save_path = os.path.join(args.save, args.filename)
-    with open(save_path, "wb") as f:
-        pickle.dump(data, f)
+        if (idx + 1) % 500 == 0:
+            save_path = os.path.join(args.save, args.filename.replace(".pkl", f"-{file_idx}.pkl"))
+            with open(save_path, "wb") as f:
+                pickle.dump(data, f)
+            data = []
+            file_idx += 1
 
 
 if __name__ == "__main__":
