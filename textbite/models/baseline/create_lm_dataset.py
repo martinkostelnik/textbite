@@ -13,6 +13,7 @@ import warnings
 warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 
 from pero_ocr.document_ocr.layout import PageLayout
+from semant.language_modelling.tokenizer import build_tokenizer
 
 from textbite.data_processing.label_studio import LabelStudioExport, AnnotatedDocument
 from textbite.utils import CZERT_PATH
@@ -24,6 +25,7 @@ def parse_arguments():
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--xmls", required=True, type=str, help="Path to a folder with xml data.")
     parser.add_argument("--tokenizer", default=CZERT_PATH, type=str, help="Path to a tokenizer.")
+    parser.add_argument("--fixed", action="store_true", help="Use custom fixed tokenizer")
     parser.add_argument("--export", required=True, type=str, help="Path to the Label-Studio export.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output pickles.")
     parser.add_argument("--filename", required=True, type=str, help="Output file name.")
@@ -31,7 +33,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def process_document(annotated_doc: AnnotatedDocument, tokenizer: BertTokenizerFast) -> list:
+def process_document(annotated_doc: AnnotatedDocument, tokenizer: BertTokenizerFast, fixed: bool) -> list:
     linear_lines = [line for region in annotated_doc.regions for line in region.lines]
 
     positive_samples = []
@@ -41,14 +43,17 @@ def process_document(annotated_doc: AnnotatedDocument, tokenizer: BertTokenizerF
             top_text = top_line.transcription.strip()
             bot_text = bot_line.transcription.strip()
 
-            tokenized_text = tokenizer(
-                top_text,
-                bot_text,
-                max_length=128,
-                truncation=True,
-                padding="max_length",
-                return_tensors="pt",
-            )
+            if fixed:
+                tokenized_text = tokenizer(top_text, bot_text)
+            else:
+                tokenized_text = tokenizer(
+                    top_text,
+                    bot_text,
+                    max_length=128,
+                    truncation=True,
+                    padding="max_length",
+                    return_tensors="pt",
+                )
             tokenized_text["label"] = torch.tensor([1])
             positive_samples.append(tokenized_text)
 
@@ -76,7 +81,10 @@ def main():
     logging.basicConfig(level=args.logging_level, force=True)
 
     export = LabelStudioExport(path=args.export)
-    tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer)
+    if args.fixed:
+        tokenizer = build_tokenizer(seq_len=65, fixed_sep=True, masking_prob=0.0)
+    else:
+        tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer)
 
     data = []
     pkl_file_idx = 1
