@@ -61,14 +61,17 @@ def process_document(annotated_doc: AnnotatedDocument, tokenizer: BertTokenizerF
             other_lines = [line for line in linear_lines if line is not bot_line]
             bot_line_negative = random.choice(other_lines)
             bot_line_negative_text = bot_line_negative.transcription.strip()
-            tokenized_text = tokenizer(
-                top_text,
-                bot_line_negative_text,
-                max_length=128,
-                truncation=True,
-                padding="max_length",
-                return_tensors="pt",
-            )
+            if fixed:
+                tokenized_text = tokenizer(top_text, bot_line_negative_text)
+            else:
+                tokenized_text = tokenizer(
+                    top_text,
+                    bot_line_negative_text,
+                    max_length=128,
+                    truncation=True,
+                    padding="max_length",
+                    return_tensors="pt",
+                )
             tokenized_text["label"] = torch.tensor([0])
             negative_samples.append(tokenized_text)
 
@@ -105,7 +108,7 @@ def main():
         annotated_doc.map_to_pagexml(pagexml=pagexml)
         files_processed += 1
 
-        document_results = process_document(annotated_doc=annotated_doc, tokenizer=tokenizer)
+        document_results = process_document(annotated_doc=annotated_doc, tokenizer=tokenizer, fixed=args.fixed)
         data.extend(document_results)
 
         if files_processed % 500 == 0:
