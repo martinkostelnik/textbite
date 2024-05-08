@@ -18,7 +18,7 @@ SAVE_PATH=$BASE/joiner-models
 
 mkdir -p $SAVE_PATH
 
-python -u $SCRIPTS_DIR/train.py \
+python -u $SCRIPTS_DIR/train_gcn.py \
     --train $DATA_PATH \
     --val-book $DATA_PATH_VAL_BOOK \
     --val-dict $DATA_PATH_VAL_DICT \
