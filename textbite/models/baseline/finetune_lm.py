@@ -139,7 +139,7 @@ def train(
     criterion = torch.nn.BCELoss(reduction="sum")
 
     best_val_f1 = 0.0
-    best_model_path = os.path.join(save_path, "best-nsp-czert.pth")
+    best_model_path = os.path.join(save_path, "best-nsp-lm264.pth")
 
     for epoch in range(epochs):
         model.train()
