@@ -31,4 +31,5 @@ python -u $SCRIPTS_DIR/train_gcn.py \
     --lr 5e-3 \
     --batch-size 64 \
     --report-interval 50 \
+    --train-result-path $SAVE_PATH/gcn-result-data.txt \
     --save $SAVE_PATH
