@@ -39,7 +39,7 @@ def parse_arguments():
 
     parser.add_argument("--report-interval", type=int, default=10, help="After how many updates to report")
     parser.add_argument("--save", type=str, help="Where to save the model best by validation F1")
-    parser.add_argument("--train_result_path", default=None, type=str, help="Where to save training results.")
+    parser.add_argument("--train-result-path", default=None, type=str, help="Where to save training results.")
 
     args = parser.parse_args()
     return args
@@ -99,10 +99,11 @@ def evaluate(model, data, device, criterion, type: str, threshold: float) -> Tup
 
     all_predictions = [int(similarity > threshold) for similarity in all_similarities]
 
-    print(f"Val loss {type}: {val_loss/len(data):.4f}")
+    loss = val_loss/len(data)
+    print(f"Val loss {type}: {loss:.4f}")
     print(classification_report(all_labels, all_predictions, digits=4))
 
-    return val_loss, all_predictions, all_labels
+    return loss, all_predictions, all_labels
 
 
 def train(
