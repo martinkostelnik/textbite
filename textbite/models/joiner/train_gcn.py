@@ -39,9 +39,40 @@ def parse_arguments():
 
     parser.add_argument("--report-interval", type=int, default=10, help="After how many updates to report")
     parser.add_argument("--save", type=str, help="Where to save the model best by validation F1")
+    parser.add_argument("--train_result_path", default=None, type=str, help="Where to save training results.")
 
     args = parser.parse_args()
     return args
+
+
+class TrainingMonitor:
+    def __init__(self):
+        self.train_losses = []
+        self.val_book_losses = []
+        self.val_dict_losses = []
+        self.val_peri_losses = []
+        self.val_book_precisions = []
+        self.val_dict_precisions = []
+        self.val_peri_precisions = []
+        self.combined_precisions = []
+
+        self.__data = [
+            self.train_losses,
+            self.val_book_losses,
+            self.val_dict_losses,
+            self.val_peri_losses,
+            self.val_book_precisions,
+            self.val_dict_precisions,
+            self.val_peri_precisions,
+            self.combined_precisions,
+        ]
+
+    def save(self, path):
+        with open(path, "w") as f:
+            for member in self.__data:
+                tmp = [str(value) for value in member]
+                result_str = " ".join(tmp)
+                print(result_str, file=f)
 
 
 def evaluate(model, data, device, criterion, type: str, threshold: float) -> Tuple[float, List[int], List[int]]:
@@ -89,10 +120,12 @@ def train(
 ):
     model.train()
 
+    monitor = TrainingMonitor()
+
     optim = torch.optim.AdamW(model.parameters(), lr)
     # criterion = torch.nn.BCEWithLogitsLoss(reduction="sum", pos_weight=torch.tensor([0.01]).to(device))
     # criterion = torch.nn.BCEWithLogitsLoss()
-    criterion = torch.nn.BCELoss(reduction="sum")
+    criterion = torch.nn.BCELoss()
 
     running_loss = 0.0
     best_precision_sum = 0.0
@@ -144,17 +177,20 @@ def train(
                 print(f"After {batch_id} Batches ({graph_i + 1} Graphs):")
                 print(f"Time {t_elapsed_ms:.1f} ms /B ", end="")
                 print(f"({(t_elapsed_ms / batch_size):.1f} ms /G) | ", end="")
-                print(f"loss {running_loss / (report_interval * batch_size):.4f} /G")
+                loss = (running_loss / report_interval)
+                print(f"loss {loss:.4f} /G")
                 print(classification_report(all_labels, all_predictions, digits=4))
+
+                monitor.train_losses.append(loss)
 
                 running_loss = 0.0
                 all_similarities = []
                 all_labels = []
 
                 print("EVALUATION REPORT:")
-                _, book_predictions, book_labels = evaluate(model, val_data_book, device, criterion, "book", threshold)
-                _, dict_predictions, dict_labels = evaluate(model, val_data_dict, device, criterion, "dictionary", threshold)
-                _, peri_predictions, peri_labels = evaluate(model, val_data_peri, device, criterion, "periodical", threshold)
+                val_book_loss, book_predictions, book_labels = evaluate(model, val_data_book, device, criterion, "book", threshold)
+                val_dict_loss, dict_predictions, dict_labels = evaluate(model, val_data_dict, device, criterion, "dictionary", threshold)
+                val_peri_loss, peri_predictions, peri_labels = evaluate(model, val_data_peri, device, criterion, "periodical", threshold)
                 print()
                 model.train()
 
@@ -170,6 +206,14 @@ def train(
                         best_model_path,
                     )
 
+                monitor.val_book_losses.append(val_book_loss)
+                monitor.val_dict_losses.append(val_dict_loss)
+                monitor.val_peri_losses.append(val_peri_loss)
+                monitor.val_book_precisions.append(book_positive_precision)
+                monitor.val_dict_precisions.append(dict_positive_precision)
+                monitor.val_peri_precisions.append(peri_positive_precision)
+                monitor.combined_precisions.append(precision_sum)
+
                 t_start = perf_counter()
 
     except KeyboardInterrupt:
@@ -179,6 +223,8 @@ def train(
         {**model.dict_for_saving, "classification_threshold": threshold},
         last_model_path,
     )
+
+    return monitor
 
 
 def main():
@@ -240,7 +286,7 @@ def main():
     logging.info("Starting training ...")
     start = perf_counter()
 
-    train(
+    results = train(
         model=model,
         device=device,
         train_data=train_graphs,
@@ -256,6 +302,11 @@ def main():
     end = perf_counter()
     t = end - start
     logging.info(f"Training finished. Took {t:.1f} s")
+
+    if args.train_result_path is not None:
+        logging.info("Saving training data ...")
+        results.save(args.train_result_path)
+        logging.info("Training data saved.")
 
 
 if __name__ == "__main__":
