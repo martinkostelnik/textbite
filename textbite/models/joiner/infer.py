@@ -29,6 +29,7 @@ def parse_arguments():
     parser.add_argument("--data", required=True, type=str, help="Path to a folder with jsons containing bites.")
     parser.add_argument("--xmls", required=True, type=str, help="Path to a folder with xml data.")
     parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weights of Joiner model.")
+    parser.add_argument("--threshold", type=float, default=None, help="Classification threshold.")
     parser.add_argument("--normalizer", required=True, type=str, help="Path to node normalizer.")
     parser.add_argument("--czert", default=CZERT_PATH, type=str, help="Path to CZERT.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
@@ -175,7 +176,12 @@ def main():
 
     logging.info("Loading model checkpoint ...")
     model_checkpoint = torch.load(args.model)
-    threshold = model_checkpoint["classification_threshold"] if "classification_threshold" in model_checkpoint.keys() else 0.5
+    if args.threshold is not None:
+        threshold = args.threshold
+        logging.info(f"Using custom threshold: {threshold}")
+    else:
+        threshold = model_checkpoint["classification_threshold"] if "classification_threshold" in model_checkpoint.keys() else args.threshold
+        logging.info(f"Using trained threshold: {threshold}")
     logging.info("Model checkpoint loaded.")
 
     logging.info("Loading language model ...")

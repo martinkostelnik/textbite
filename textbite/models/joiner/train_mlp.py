@@ -87,7 +87,6 @@ def evaluate(
 
             all_predictions.append((probs > threshold).cpu().item())
             all_labels.append(label.cpu().item())
-
     
     print(f"Val loss {type}: {val_loss/len(all_labels):.4f}")
     print(classification_report(all_labels, all_predictions, digits=4))
@@ -160,7 +159,7 @@ def train(
                 {**model.dict_for_saving, "classification_threshold": threshold},
                 best_model_path,
             )
-        
+
     torch.save(
         {**model.dict_for_saving, "classification_threshold": threshold},
         last_model_path,
