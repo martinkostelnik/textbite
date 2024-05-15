@@ -9,10 +9,10 @@ BASE=/home/martin/textbite
 source $BASE/../semant/venv/bin/activate
 
 SCRIPTS_DIR=$BASE/textbite/models/yolo
-IMG_PATH=$BASE/data/segmentation/images/val
-XML_PATH=$BASE/data/segmentation/xmls/val
-ALTO_PATH=$BASE/data/segmentation/altos
-MODEL_PATH=$BASE/yolo/yolo-models-200/yolo-s-800.pt
+IMG_PATH=$BASE/data/images/val
+XML_PATH=$BASE/data/xmls/val
+ALTO_PATH=$BASE/data/altos
+MODEL_PATH=$BASE/models/yolo-s-800.pt
 SAVE_PATH=$BASE/yolo-inference-val
 
 python -u $SCRIPTS_DIR/infer.py \

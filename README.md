@@ -10,6 +10,8 @@ Karel Beneš (ibenes@fit.vut.cz)
 
 ## Running
 
+Running requires PERO-OCR installed
+
 To perform YOLOv8+GNN inference, run:
 ```
 textbite \
@@ -24,7 +26,7 @@ textbite \
     [--alto altos/]
  ```
 
-Should you only run YOLO/GNN as standalone models, the scripts are available in the `scripts` folder.
+Should you only run YOLO/GNN as standalone models, bash scripts are available in the `scripts` folder. Note that paths in those scripts have to be changed to suit your needs
 
 ## Models
 

@@ -24,4 +24,4 @@ classifiers=[
 "textbite" = "textbite"
 
 [project.scripts]
-textbite = "textbite.scripts.infer:main"
+textbite = "textbite.infer:main"
