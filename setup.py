@@ -1,6 +1,4 @@
-from setuptools import setup, find_packages
+import setuptools
 
-setup(
-    name='textbite',
-    packages=find_packages(),
-)
+if __name__ == "__main__":
+    setuptools.setup()

@@ -1,3 +1,10 @@
+"""Utility for removing empty and corrupted lines from PAGE-XML
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import os
 import sys

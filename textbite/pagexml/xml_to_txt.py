@@ -1,3 +1,10 @@
+"""Transformation of PAGE-XML files to pure text
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import os
 import sys
