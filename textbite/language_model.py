@@ -1,3 +1,10 @@
+""" Utility for LM loading from the semANT package
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 from typing import Tuple
 
 from transformers import BertModel, BertTokenizerFast

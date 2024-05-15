@@ -1,3 +1,10 @@
+"""Transforms exported data file from Label-Studio to the output JSON format
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import sys
 import argparse
 import os

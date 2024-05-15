@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""Page Geometry definition
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 from typing import Optional, List, Tuple, Dict
 from collections import namedtuple
 from math import sqrt

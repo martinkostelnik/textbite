@@ -1,3 +1,10 @@
+"""Definition of the export data file from Label-Studio. Running this file is for debug only.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 from typing import Optional, List, Tuple, Dict
 import json
 from dataclasses import dataclass, field

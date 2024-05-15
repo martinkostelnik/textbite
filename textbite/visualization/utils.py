@@ -1,3 +1,10 @@
+"""Visualization utilities
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import cv2
 import numpy as np
 

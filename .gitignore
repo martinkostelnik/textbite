@@ -22,3 +22,5 @@ backup/
 /joiner-inference-val/
 /yolo-inference/
 /yolo-inference-val/
+/inference/
+/benchmark/

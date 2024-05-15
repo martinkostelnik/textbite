@@ -1,3 +1,10 @@
+"""Inference for the baseline method and all its variants.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import os
 import logging
@@ -18,6 +25,7 @@ from textbite.geometry import PageGeometry, LineGeometry, enclosing_bbox, bbox_d
 from textbite.bite import Bite, save_bites
 from textbite.utils import CZERT_PATH
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
@@ -28,7 +36,7 @@ def parse_arguments():
     parser.add_argument("--tokenizer", default=CZERT_PATH, type=str, help="Path to the tokenizer.")
     parser.add_argument("--threshold", type=float, default=0.5, help="Classification threshold.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output jsons.")
-    parser.add_argument("--method", choices=["lm", "dist", "base"], default="base", help="One of [method, dist, base].")
+    parser.add_argument("--method", choices=["lm", "dist", "base"], default="base", help="One of [lm, dist, base].")
 
     return parser.parse_args()
 

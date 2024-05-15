@@ -1,3 +1,10 @@
+"""Script for the generation of final PAGE-XML files.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik, Karel Benes
+"""
+
+
 import numpy as np
 import lxml.etree as ET
 from collections import defaultdict
@@ -22,6 +29,7 @@ class PageXMLEnhancer:
         region_centers = [polygon_centroid(*zip(*r.polygon)) for r in layout.regions]
 
         assert len(set(sum((b.lines for b in bites), []))) == sum(len(b.lines) for b in bites), 'Bites have to be disjunct'
+        assert len(set(sum((r.lines for r in layout.regions), []))) == len([l for l in layout.lines_iterator()]), "Split layout regions have to be disjunct"
         assert set(sum((b.lines for b in bites), [])).issubset(all_lines_ids), 'Bites must only have lines from the layout'
 
         coverage = [self.get_covering_bites(bite.lines, layout_bites) for bite in bites]
@@ -41,6 +49,19 @@ class PageXMLEnhancer:
         page_qname = ET.QName(ns, 'Page')
         out_xml.find(page_qname).insert(0, reading_order_root)
 
+        ns = {"ns": out_xml.nsmap[None]}
+        regions = out_xml.findall(".//ns:TextRegion", ns)
+        for region in regions:
+            id = region.get("id")
+            if "_" not in id:
+                continue
+            id_cropped = int(id[id.find("_")+1:])
+            try:
+                cls = bites[id_cropped].cls
+            except IndexError:
+                continue
+            region.set("type", cls)
+
         ET.indent(out_xml)
         return ET.tostring(out_xml, pretty_print=True, encoding=str)
 
@@ -51,23 +72,23 @@ class PageXMLEnhancer:
             for line in region.lines:
                 for bite_id, bite in enumerate(bites):
                     if line.id in bite.lines:
-                        covering_bites[bite_id].append(line.id)
+                        covering_bites[bite_id].append(line)
                         break
                 else:
-                    covering_bites[-1].append(line.id)
+                    covering_bites[-1].append(line)
 
             #  regions covered by a single bite need no further attention
             if len(covering_bites) == 1:
                 new_regions.append(region)
             else:
-                for bite, lines in covering_bites.items():
-                    bite_lines = [line for line in region.lines if line.id in lines]
-                    polygon = get_lines_polygon(bite_lines)
-                    new_region = RegionLayout(f'{region.id}_{bite}', polygon)
-                    new_region.lines = bite_lines
-                    new_regions.append(region)
+                for bite_id, lines in enumerate(covering_bites.values()):
+                    polygon = get_lines_polygon(lines)
+                    new_region = RegionLayout(f'{region.id}_{bite_id}', polygon)
+                    new_region.lines = lines
+                    new_regions.append(new_region)
 
         layout.regions = new_regions
+
 
     def get_covering_bites(self, lines_to_cover, bites):
         lines_to_cover = set(lines_to_cover)
@@ -106,7 +127,7 @@ class PageXMLEnhancer:
                 yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r][0]))
                 running_y_overlapped = [r]
 
-        yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r]))
+        yx_sorted_regions.extend(sorted(running_y_overlapped, key=lambda r: region_centers[r][0]))
 
         bite_reading_order = [r for r in yx_sorted_regions]
 

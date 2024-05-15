@@ -1,3 +1,10 @@
+"""Graph Neural Network training.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import sys
 import os
 import argparse
@@ -6,6 +13,7 @@ import logging
 from typing import Tuple, List
 from time import perf_counter
 import pickle
+import copy
 
 import torch
 from sklearn.metrics import classification_report, precision_score
@@ -14,7 +22,6 @@ from safe_gpu import safe_gpu
 
 from textbite.models.joiner.model import JoinerGraphModel
 from textbite.models.joiner.graph import Graph  # needed for unpickling
-from textbite.models.graph.create_graphs import collate_custom_graphs
 from textbite.models.utils import get_similarities, GraphNormalizer, load_graphs
 
 
@@ -43,6 +50,26 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
+
+
+def collate_custom_graphs(graphs):
+    multi_graph = copy.deepcopy(graphs[0])
+
+    multi_graph.id = None  # We don't guarantee this makes any sense
+    multi_graph.node_features = torch.concatenate([g.node_features for g in graphs])  # Shape (n_nodes, n_features)
+    multi_graph.line_ids = None  # We don't guarantee this makes any sense
+
+    adjusted_edges_index = []
+    offset = 0
+    for g in graphs:
+        adjusted_edges_index.append(g.edge_index + offset)
+        offset += len(g.node_features)
+    multi_graph.edge_index = torch.concatenate(adjusted_edges_index, dim=1)  # Shape (2, n_edges)
+
+    multi_graph.edge_attr = torch.concatenate([g.edge_attr for g in graphs])  # Shape (n_edges, n_features), but we have none
+    multi_graph.labels = torch.concatenate([g.labels for g in graphs])  # Shape (1, n_edges)
+
+    return multi_graph
 
 
 class TrainingMonitor:

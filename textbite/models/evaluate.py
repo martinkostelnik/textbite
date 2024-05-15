@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+"""Calculate clustering metrics for evaluation.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import json
 import logging

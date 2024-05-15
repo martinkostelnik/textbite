@@ -1,4 +1,9 @@
-#!/usr/bin/env python3
+"""Inference using the YOLO model
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
 
 import argparse
 import json

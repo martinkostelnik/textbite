@@ -1,4 +1,10 @@
-import os
+"""Definition of a graph. Running this file is for debug only.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 from typing import Optional, List, Dict, Tuple
 
 import itertools

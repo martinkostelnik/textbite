@@ -1,3 +1,10 @@
+"""Create NSP dataset for BERT-like LM training
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import os
 import logging

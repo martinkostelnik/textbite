@@ -1,3 +1,10 @@
+"""Script for creating training graphs.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import logging
 import os

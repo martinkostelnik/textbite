@@ -1,3 +1,10 @@
+"""Utility script to modify PAGE-XML to ensure UUIDs as line ids
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import sys
 import os
 import uuid

@@ -1,3 +1,10 @@
+"""Script for the fine-tuning of the pre-trained CZERT model
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import os
 import logging
@@ -228,3 +235,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

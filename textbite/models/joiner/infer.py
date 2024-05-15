@@ -1,4 +1,9 @@
-#!/usr/bin/env python3
+"""Inference using the graph neural network. It expects already created bites from the YOLO model.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
 
 import argparse
 import logging
@@ -16,7 +21,6 @@ from pero_ocr.document_ocr.layout import PageLayout
 from textbite.models.joiner.graph import JoinerGraphProvider, Graph
 from textbite.models.joiner.model import JoinerGraphModel
 from textbite.models.MLP import MLP
-from textbite.models.autoencoder import AutoEncoder
 from textbite.models.utils import edge_indices_to_edges, get_transitive_subsets, GraphNormalizer, get_similarities, ModelType
 from textbite.utils import CZERT_PATH
 from textbite.bite import load_bites, Bite, save_bites
@@ -112,29 +116,6 @@ def get_positive_edges_mlp(
     return positive_edges
 
 
-def get_positive_edges_ae(
-        graph: Graph,
-        joiner: AutoEncoder,
-        device,
-        threshold: float,
-    ) -> List[Bite]:
-    graph_features, _, edges = graph.flatten()
-
-    positive_edges = []
-
-    for edge_features, edge in zip(graph_features, edges):
-        edge_features = edge_features.to(device)
-
-        with torch.no_grad():
-            _, reconstructed_features = joiner(edge_features)
-            reconstruction_error = torch.nn.functional.mse_loss(reconstructed_features, edge_features).cpu().item()
-            
-        if reconstruction_error > threshold:
-            positive_edges.append(edge)
-
-    return positive_edges
-
-
 def join_bites(
         bites: List[Bite],
         joiner: JoinerGraphModel,
@@ -155,9 +136,6 @@ def join_bites(
 
         case ModelType.GCN:
             positive_edges = get_positive_edges_gcn(graph, joiner, device, threshold)
-
-        case ModelType.AE:
-            positive_edges = get_positive_edges_ae(graph, joiner, device, threshold)
 
     nodes_to_join = get_joining_dict(positive_edges)
     new_bites = join_bites_by_dict(nodes_to_join, bites)
@@ -208,9 +186,6 @@ def main():
 
         case ModelType.GCN:
             joiner = JoinerGraphModel.from_pretrained(model_checkpoint, device)
-
-        case ModelType.AE:
-            joiner = AutoEncoder.from_pretrained(model_checkpoint, device)
 
         case _:
             raise ValueError("Invalid type of model loaded from checkpoint.")

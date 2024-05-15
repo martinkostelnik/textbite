@@ -1,3 +1,10 @@
+"""Utilities for feature extraction
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 from typing import List, Optional
 
 import torch

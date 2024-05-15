@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+
+"""Graph Neural Network model definition
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import torch
 from torch import nn
 from torch_geometric.nn import ResGatedGraphConv

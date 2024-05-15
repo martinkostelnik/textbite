@@ -1,3 +1,10 @@
+"""Script for the fine-tuning of the pretrained custom BERT-like LM.
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import argparse
 import os
 import logging

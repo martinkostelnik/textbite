@@ -1,3 +1,11 @@
+"""Utilities
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
+
 from typing import List, Tuple, Set
 from time import perf_counter
 import pickle
@@ -12,8 +20,7 @@ from textbite.models.joiner.graph import Graph
 class ModelType(Enum):
     GCN = 1
     MLP = 2
-    AE = 3
-
+    
 
 def edges_to_edge_indices(edges: List[Tuple[int, int]]) -> Tuple[List[int], List[int]]:
     from_indices = [from_idx for from_idx, _ in edges]

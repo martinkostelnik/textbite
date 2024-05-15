@@ -1,4 +1,13 @@
 from __future__ import annotations
+
+
+"""MLP definition
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+
+"""
+
 from typing import Callable
 
 from torch import nn

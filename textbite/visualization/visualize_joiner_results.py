@@ -1,3 +1,10 @@
+"""Visualizing the effect of the GNN compared to YOLO
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import logging
 import sys
 import argparse

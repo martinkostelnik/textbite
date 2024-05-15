@@ -1,3 +1,10 @@
+"""Transforms exported data file from Label-Studio to the YOLO format
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import os
 import sys
 import argparse

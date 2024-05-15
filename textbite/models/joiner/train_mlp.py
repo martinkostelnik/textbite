@@ -1,3 +1,10 @@
+"""MLP Training
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 import sys
 import argparse
 import logging

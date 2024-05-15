@@ -1,3 +1,10 @@
+"""Utilities
+
+Date -- 15.05.2024
+Author -- Martin Kostelnik
+"""
+
+
 from enum import Enum
 from typing import List, Dict
 
