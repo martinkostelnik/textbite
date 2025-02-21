@@ -10,7 +10,7 @@ import lxml.etree as ET
 from collections import defaultdict
 
 from textbite.geometry import polygon_to_bbox
-from pero_ocr.document_ocr.layout import RegionLayout
+from pero_ocr.core.layout import RegionLayout
 
 
 class UnsupportedLayoutError(Exception):

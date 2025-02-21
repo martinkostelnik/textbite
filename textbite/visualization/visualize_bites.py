@@ -16,7 +16,7 @@ import cv2
 from cv2.typing import MatLike
 import numpy as np
 
-from pero_ocr.document_ocr.layout import PageLayout
+from pero_ocr.core.layout import PageLayout
 
 from textbite.visualization.utils import COLORS, overlay_line
 from textbite.bite import load_bites, Bite

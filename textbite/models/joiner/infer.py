@@ -16,7 +16,7 @@ import torch
 from time import perf_counter
 from transformers import BertTokenizerFast, BertModel
 
-from pero_ocr.document_ocr.layout import PageLayout
+from pero_ocr.core.layout import PageLayout
 
 from textbite.models.joiner.graph import JoinerGraphProvider, Graph
 from textbite.models.joiner.model import JoinerGraphModel

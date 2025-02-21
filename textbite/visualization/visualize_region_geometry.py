@@ -13,7 +13,7 @@ import logging
 import cv2
 from ultralytics import YOLO
 
-from pero_ocr.document_ocr.layout import PageLayout
+from pero_ocr.core.layout import PageLayout
 
 from textbite.geometry import PageGeometry
 from textbite.models.yolo.infer import YoloBiter

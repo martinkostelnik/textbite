@@ -13,7 +13,7 @@ import json
 import urllib.parse
 import logging
 
-from pero_ocr.document_ocr.layout import PageLayout, TextLine
+from pero_ocr.core.layout import PageLayout, TextLine
 
 from textbite.geometry import AABB, polygon_to_bbox, bbox_to_yolo, best_intersecting_bbox
 
@@ -187,7 +187,8 @@ class LabelStudioExport:
 
             document_type = partition[0].rpartition("/")[2]
             document_type = document_type.partition("-")[0]
-            document_type = DocumentType(document_type)
+            document_type = "document"
+            # document_type = DocumentType(document_type)
 
             try:
                 regions, relations = self.parse_annotated_regions(annotated_regions)

@@ -16,7 +16,7 @@ import warnings
 warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 
 import xml.etree.ElementTree as ET
-from pero_ocr.document_ocr.layout import PageLayout
+from pero_ocr.core.layout import PageLayout
 from ultralytics import YOLO
 from safe_gpu import safe_gpu
 

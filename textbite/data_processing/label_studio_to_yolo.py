@@ -10,7 +10,7 @@ import sys
 import argparse
 import logging
 
-from pero_ocr.document_ocr.layout import PageLayout
+from pero_ocr.core.layout import PageLayout
 
 from textbite.data_processing.label_studio import LabelStudioExport
 

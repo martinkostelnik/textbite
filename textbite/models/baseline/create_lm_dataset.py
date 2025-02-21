@@ -19,7 +19,7 @@ from numba.core.errors import NumbaDeprecationWarning
 import warnings
 warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 
-from pero_ocr.document_ocr.layout import PageLayout
+from pero_ocr.core.layout import PageLayout
 from semant.language_modelling.tokenizer import build_tokenizer
 
 from textbite.data_processing.label_studio import LabelStudioExport, AnnotatedDocument

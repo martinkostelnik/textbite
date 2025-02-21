@@ -12,7 +12,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import BertTokenizerFast, BertModel
 
-from pero_ocr.document_ocr.layout import PageLayout
+from pero_ocr.core.layout import PageLayout
 
 from textbite.geometry import dist_l2, PageGeometry, RegionGeometry
 

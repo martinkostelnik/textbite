@@ -18,7 +18,7 @@ import torch
 from shapely.ops import nearest_points
 from shapely.geometry import Polygon
 
-from pero_ocr.document_ocr.layout import PageLayout, TextLine
+from pero_ocr.core.layout import PageLayout, TextLine
 
 from textbite.utils import hash_strings
 
