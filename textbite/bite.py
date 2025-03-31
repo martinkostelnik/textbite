@@ -35,3 +35,4 @@ def load_bites(path: str) -> List[Bite]:
 def save_bites(result: List[Bite], path: str) -> None:
     with open(path, "w") as f:
         json.dump([bite.__dict__ for bite in result], f, indent=4, ensure_ascii=False)
+        # json.dump(result, f, indent=4, ensure_ascii=False)

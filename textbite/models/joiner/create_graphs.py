@@ -21,6 +21,7 @@ from textbite.data_processing.label_studio import LabelStudioExport
 from textbite.models.yolo.infer import YoloBiter
 from textbite.models.joiner.graph import JoinerGraphProvider
 from textbite.utils import CZERT_PATH
+from textbite.bite import load_bites
 
 
 def parse_arguments():
@@ -28,7 +29,7 @@ def parse_arguments():
 
     parser.add_argument("--logging-level", default='WARNING', choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'])
     parser.add_argument("--json", required=True, type=str, help="Path to label studio exported json.")
-    parser.add_argument("--model", required=True, type=str, help="Path to the .pt file with weights of YOLO model.")
+    parser.add_argument("--bites", required=True, type=str, help="Path to a folder with bites.")
     parser.add_argument("--images", required=True, type=str, help="Path to a folder with images data.")
     parser.add_argument("--xmls", type=str, help="Path to a folder with xml data.")
     parser.add_argument("--save", required=True, type=str, help="Folder where to put output pickle file.")
@@ -55,19 +56,22 @@ def main():
     logging.info("CZERT loaded.")
 
     export = LabelStudioExport(args.json)
-    yolo = YoloBiter(YOLO(args.model))
+    # yolo = YoloBiter(YOLO(args.model))
     graph_provider = JoinerGraphProvider(tokenizer, czert, device)
 
-    xml_filenames = [xml_filename for xml_filename in os.listdir(args.xmls) if xml_filename.endswith(".xml")]
+    # xml_filenames = [xml_filename for xml_filename in os.listdir(args.xmls) if xml_filename.endswith(".xml")]
+    bite_filenames = [bite_filename for bite_filename in os.listdir(args.bites) if bite_filename.endswith(".json")]
     bad_files = 0
+    graphs_created = 0
     graphs = []
 
-    for i, xml_filename in enumerate(xml_filenames):
-        img_filename = xml_filename.replace(".xml", ".jpg")
+    for i, bite_filename in enumerate(bite_filenames):
+        xml_filename = bite_filename[:-len(".json")] + ".xml"
+        img_filename = xml_filename[:-len(".xml")] + ".jpg"
         path_xml = os.path.join(args.xmls, xml_filename)
         path_img = os.path.join(args.images, img_filename)
-        
-        logging.info(f"({i}/{len(xml_filenames)})Processing: {path_xml}")
+
+        logging.info(f"({i}/{len(bite_filenames)})Processing: {path_xml}")
         try:
             document = export.documents_dict[img_filename]
         except KeyError:
@@ -76,7 +80,8 @@ def main():
 
         pagexml = PageLayout(file=path_xml)
         document.map_to_pagexml(pagexml)
-        bites = yolo.produce_bites(path_img, pagexml)
+        # bites = yolo.produce_bites(path_img, pagexml)
+        bites = load_bites(os.path.join(args.bites, img_filename[:-4] + ".json"))
         try:
             graph = graph_provider.get_graph_from_bites(bites, path_img, pagexml, document)
         except RuntimeError:
@@ -85,7 +90,9 @@ def main():
             continue
 
         graphs.append(graph)
+        graphs_created += 1
 
+    logging.info(f"Graphs created: {graphs_created}")
     os.makedirs(args.save, exist_ok=True)
     save_path = os.path.join(args.save, args.filename)
     with open(save_path, "wb") as f:

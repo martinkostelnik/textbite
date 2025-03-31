@@ -13,6 +13,7 @@ import logging
 from pero_ocr.core.layout import PageLayout
 
 from textbite.data_processing.label_studio import LabelStudioExport
+from textbite.bite import save_bites
 
 
 def parse_arguments():
@@ -36,10 +37,13 @@ def main():
 
     annotated_data = LabelStudioExport(args.json)
 
+    os.makedirs(args.save, exist_ok=True)
+
     result_str = ""
     for annotated_document in annotated_data.documents:
         filename_img = annotated_document.filename
-        filename_xml = filename_img.replace(".jpg", ".xml")
+        filename_xml = filename_img[:-len(".jpg")] + ".xml"
+        filename_json = filename_img[:-len(".jpg")] + ".json"
 
         path_xml = os.path.join(args.xml, filename_xml)
         try:
@@ -52,15 +56,14 @@ def main():
         if not args.ignore_relations:
             annotated_document.merge_regions()
 
-        for bite in annotated_document.regions:
-            bite_id = bite.lines[0].id
+        bites = annotated_document.to_bites(["image", "image-desc", "page-number", "note"])
 
-            for line in bite.lines:
-                result_str += f"{line.id}\t{bite_id}\n"
+        save_path = os.path.join(args.save, filename_json)
+        save_bites(bites, save_path)
 
-    save_path = os.path.join(args.save, "ids-to-bite-ids.txt")
-    with open(save_path, "w") as f:
-        print(result_str, file=f, end="")
+    # save_path = os.path.join(args.save, "ids-to-bite-ids.txt")
+    # with open(save_path, "w") as f:
+    #     print(result_str, file=f, end="")
 
 
 if __name__ == "__main__":
