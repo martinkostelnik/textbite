@@ -61,7 +61,7 @@ def get_similarities(node_features, edge_indices):
     lhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[0, :])
     rhs_nodes = torch.index_select(input=node_features, dim=0, index=edge_indices[1, :])
     similarities = torch.cosine_similarity(lhs_nodes, rhs_nodes, dim=1)
-    similarities = torch.sigmoid(similarities)
+    # similarities = torch.sigmoid(similarities)
     return similarities
 
 
@@ -98,24 +98,16 @@ class GraphNormalizer:
 
 def load_graphs(
     path_train: str,
-    path_val_book: str,
-    path_val_dict: str,
-    path_val_peri: str,
+    path_val: str,
 ) -> Tuple[List[Graph], List[Graph], List[Graph], List[Graph]]:
     start = perf_counter()
     with open(path_train, "rb") as f:
         train_data = pickle.load(f)
 
-    with open(path_val_book, "rb") as f:
-        val_data_book = pickle.load(f)
-
-    with open(path_val_dict, "rb") as f:
-        val_data_dict = pickle.load(f)
-
-    with open(path_val_peri, "rb") as f:
-        val_data_peri = pickle.load(f)
+    with open(path_val, "rb") as f:
+        val_data = pickle.load(f)
 
     end = perf_counter()
-    logging.info(f"Train graphs: {len(train_data)} | Val graphs book: {len(val_data_book)} | Val graphs dictionary: {len(val_data_dict)} | Val graphs periodical: {len(val_data_peri)} | Took: {(end-start):.3f} s")
+    logging.info(f"Train graphs: {len(train_data)} | Val graphs: {len(val_data)} | Took: {(end-start):.3f} s")
 
-    return train_data, val_data_book, val_data_dict, val_data_peri
+    return train_data, val_data

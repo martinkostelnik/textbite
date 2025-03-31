@@ -12,10 +12,12 @@ from enum import Enum
 import json
 import urllib.parse
 import logging
+import os
 
 from pero_ocr.core.layout import PageLayout, TextLine
 
 from textbite.geometry import AABB, polygon_to_bbox, bbox_to_yolo, best_intersecting_bbox
+from textbite.bite import Bite
 
 
 class RegionType(Enum):
@@ -24,6 +26,7 @@ class RegionType(Enum):
     NOTE = "note"
     IMAGE = "image"
     IMAGE_DESC = "image-desc"
+    PAGE_NUMBER = "page-number"
 
 
 class DocumentType(Enum):
@@ -76,6 +79,16 @@ class AnnotatedDocument:
 
     def get_json_str(self, indent: Optional[int]=None) -> str:
         return json.dumps(self.to_json(), indent=indent)
+
+    def to_bites(self, ignore_classes=[]) -> List[Bite]:
+        bites = []
+        for region in self.regions:
+            if region.label.value in ignore_classes:
+                continue
+            bbox = region.bbox
+            bite = Bite(cls=region.label.value, bbox=bbox, lines=[line.id for line in region.lines])
+            bites.append(bite)
+        return bites
 
     def to_yolo(self) -> List[Tuple[int, float, float, float, float]]:
         yolos = []
@@ -180,19 +193,19 @@ class LabelStudioExport:
         for annotated_file in raw_data:
             id = int(annotated_file["id"])
             annotated_regions = annotated_file["annotations"]
-            pth = annotated_file["data"]["image"]
+            # pth = annotated_file["data"]["image"]
 
-            partition = pth.rpartition("/")
-            filename = urllib.parse.unquote(partition[2])
+            # partition = pth.rpartition("/")
+            filename = urllib.parse.unquote(os.path.basename(annotated_file["data"]["image"]))
 
-            document_type = partition[0].rpartition("/")[2]
-            document_type = document_type.partition("-")[0]
+            # document_type = partition[0].rpartition("/")[2]
+            # document_type = document_type.partition("-")[0]
             document_type = "document"
             # document_type = DocumentType(document_type)
 
             try:
                 regions, relations = self.parse_annotated_regions(annotated_regions)
-            except ValueError:
+            except ValueError as e:
                 continue
 
             document = AnnotatedDocument(
@@ -213,8 +226,24 @@ class LabelStudioExport:
 
         _annotated_regions = annotated_regions[0]["result"]
 
+        # deleted_regions = []
+        # for region in _annotated_regions:
+        #     if region["type"] == "rectanglelabels":
+        #         cls = region["value"]["rectanglelabels"][0]
+
+        #         if cls not in ["text", "title"]:
+        #             deleted_regions.append(region["id"])
+
+        # deleted_relation_indices = []
+        # for idx, region in enumerate(_annotated_regions):
+        #     if region["type"] == "relation":
+        #         if region["from_id"] in deleted_regions or region["to_id"] in deleted_regions:
+        #             deleted_relation_indices.append(idx)
+
         relations = [r for r in _annotated_regions if r["type"] == "relation"]
+        # relations = [r for r in relations if r["from_id"] not in deleted_regions and r["to_id"] not in deleted_regions]
         regions = [r for r in _annotated_regions if r["type"] == "rectanglelabels"]
+        # regions = [r for r in regions if r["id"] not in deleted_regions]
 
         relations_parsed = self.parse_relations(relations)
         regions_parsed = self.parse_regions(regions)
