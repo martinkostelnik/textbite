@@ -44,7 +44,7 @@ class PageXMLEnhancer:
 
         reading_order_root = self.get_reading_order_xml(reading_order, layout)
 
-        out_xml = ET.fromstring(layout.to_pagexml_string())
+        out_xml = ET.fromstring(layout.to_pagexml_string().encode('utf-8'))
         ns = out_xml.nsmap[None]
         page_qname = ET.QName(ns, 'Page')
         out_xml.find(page_qname).insert(0, reading_order_root)

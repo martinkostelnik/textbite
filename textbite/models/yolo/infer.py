@@ -44,7 +44,7 @@ class YoloBiter:
         self.model = model
 
     def find_bboxes(self, img_filename: str) -> Tuple[List[AABB], List[AABB]]:
-        results = self.model.predict(source=img_filename)
+        results = self.model.predict(source=img_filename, conf=0.2, iou=0.95)
         assert len(results) == 1
         result = results[0]
 
@@ -77,20 +77,54 @@ class YoloBiter:
 
         return AABB(xmin, ymin, xmax, ymax)
 
-    def filter_bboxes(self, bboxes: List[AABB]) -> List[AABB]:
-        new_bboxes = []
+    # def filter_bboxes(self, bboxes: List[AABB]) -> List[AABB]:
+    #     new_bboxes = []
 
-        for i, box1 in enumerate(bboxes):
-            is_enclosed = False
-            for j, box2 in enumerate(bboxes):
-                if i != j and self.is_contained(box1, box2):
-                    is_enclosed = True
+    #     remaining_bboxes = bboxes.copy()
+
+    #     for i, box1 in enumerate(bboxes):
+    #         is_enclosed = False
+
+    #         for j, box2 in enumerate(remaining_bboxes):
+    #             if box1 != box2 and self.is_contained(box1, box2):
+    #                 is_enclosed = True
+    #                 break
+
+    #         if not is_enclosed:
+    #             new_bboxes.append(box1)
+    #         else:
+    #             remaining_bboxes.remove(box1)
+
+    #     return new_bboxes
+    
+    def filter_bboxes(self, bboxes: List[AABB]) -> List[AABB]:
+        changed = True
+
+        while changed:
+            changed = False
+
+            for i, bbox1 in enumerate(bboxes):
+                for j, bbox2 in enumerate(bboxes):
+                    if i == j:
+                        continue
+
+                    if self.is_contained(bbox1, bbox2) or self.is_contained(bbox2, bbox1):
+                        new_bbox = AABB(
+                            xmin=min(bbox1.xmin, bbox2.xmin),
+                            ymin=min(bbox1.ymin, bbox2.ymin),
+                            xmax=max(bbox1.xmax, bbox2.xmax),
+                            ymax=max(bbox1.ymax, bbox2.ymax)
+                        )
+                        bboxes = [bbox for k, bbox in enumerate(bboxes) if k != i and k != j]
+                        bboxes.append(new_bbox)
+                        changed = True
+                        break
+
+                if changed:
                     break
 
-            if not is_enclosed:
-                new_bboxes.append(box1)
+        return bboxes
 
-        return new_bboxes
 
     def produce_bites(self, img_filename: str, layout: PageLayout, alto_filename: Optional[str]=None) -> List[Bite]:
         texts, titles = self.find_bboxes(img_filename)

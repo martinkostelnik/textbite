@@ -8,7 +8,7 @@ Author -- Martin Kostelnik
 
 
 from typing import Optional, List, Tuple, Dict
-from collections import namedtuple
+from collections import namedtuple, Counter
 from math import sqrt
 from functools import cached_property
 
@@ -85,6 +85,18 @@ def bbox_intersection_over_area(lhs: AABB, rhs: AABB) -> float:
 
     assert intersection <= area
     return intersection / area
+
+def bbox_intersection_over_union(lhs: AABB, rhs: AABB) -> float:
+    intersection = bbox_intersection(lhs, rhs)
+    union = bbox_area(lhs) + bbox_area(rhs) - intersection
+
+    if union == 0.0:
+        return 0.0
+
+    assert intersection <= union
+    result = intersection / union
+    assert 0.0 <= result <= 1.0
+    return result
 
 
 def bbox_intersection_x(lhs: AABB, rhs: AABB) -> float:
@@ -285,8 +297,8 @@ class RegionGeometry(GeometryEntity):
         self.visible_entities = []
         other_entities = [entity for entity in entities if self is not entity]
 
-        if self.parent is not None:
-            self.visible_entities.append(self.parent)
+        # if self.parent is not None:
+        #     self.visible_entities.append(self.parent)
 
         if self.child is not None:
             self.visible_entities.append(self.child)
@@ -295,16 +307,25 @@ class RegionGeometry(GeometryEntity):
         horizontal_rays = []
         horizontal_rays.append(Ray(Point(self.bbox.xmax, self.center.y), Point(1, 0.5)))
         horizontal_rays.append(Ray(Point(self.bbox.xmax, self.center.y), Point(1, 0)))
-        horizontal_rays.append(Ray(Point(self.bbox.xmax, self.center.y), Point(1, -0.5)))
+        # horizontal_rays.append(Ray(Point(self.bbox.xmax, self.center.y), Point(1, -0.5)))
 
         horizontal_visible_entities = find_visible_entities(horizontal_rays, other_entities)
         self.visible_entities.extend(horizontal_visible_entities)
+
+        if self.child is not None and self.child in horizontal_visible_entities:
+            horizontal_visible_entities.remove(self.child)
+
         for ve in horizontal_visible_entities:
-            for relative in ve.lineage_iterator():
+            # for relative in ve.lineage_iterator():
+            for relative in ve.parent_iterator():
                 if relative not in self.visible_entities:
+                    if bbox_intersection_x(self.bbox, relative.bbox) > 0.0:
+                        break
                     self.visible_entities.append(relative)
 
         self.visible_entities = list(set(self.visible_entities))
+        if self in self.visible_entities:
+            self.visible_entities.remove(self)
 
 
 class LineGeometry(GeometryEntity):
@@ -539,6 +560,57 @@ class PageGeometry:
                 if line_geometry.child.parent is not line_geometry:
                     line_geometry.child.parent = None
                     line_geometry.child = None
+
+    def split_geometry_into_paragraphs(self) -> None:
+        # Remove all children that are not unique
+        child_counts = Counter(line.child for line in self.lines if line.child is not None)
+
+        for line in self.lines:
+            if line.child is not None and child_counts[line.child] > 1:
+                line.child = None
+
+        # Remove all children whose center is to the right of the parent
+        #                     which start to the right of the parent
+        for line in self.lines:
+            if line.child is None:
+                continue
+
+            if (line.child.center.x > line.center.x) and (line.child.center.x - line.center.x) > (self.page_width * 0.005):
+                line.child = None
+                continue
+
+            if (line.child.bbox.xmin > line.bbox.xmin) and (line.child.bbox.xmin - line.bbox.xmin) > (self.page_width * 0.01):
+                line.child = None
+
+        # Sever connections between lines that are further apart than the (scaled) average in the paragraph
+        children_lines = [line.child for line in self.lines if line.child is not None]
+        first_lines = list(set(self.lines) - set(children_lines))
+
+        for first_line in first_lines:
+            if first_line.child is None:
+                continue
+            if first_line.child.child is None:
+                continue
+
+            paragraph_average_y_dist = 0.0
+            current_line = first_line
+            for child in first_line.children_iterator():
+                paragraph_average_y_dist += max(0.0,  child.center.y - current_line.center.y)
+                current_line = child
+            paragraph_average_y_dist /= len([0 for _ in first_line.children_iterator()])
+            iter_line = first_line
+            for child in first_line.children_iterator():
+                if max(0.0, child.center.y - iter_line.center.y) > (paragraph_average_y_dist * 1.2):
+                    iter_line.child = None
+                iter_line = child
+
+        for line in self.lines:
+            if line.child is None:
+                continue
+
+            dist = bbox_dist_y(line.bbox, line.child.bbox)
+            if dist > (self.page_height * 0.015):
+                line.child = None
 
 
     def __str__(self) -> str:

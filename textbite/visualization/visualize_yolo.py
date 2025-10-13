@@ -40,14 +40,14 @@ def draw_bboxes(image, lines):
         width = float(width)
         height = float(height)
 
-        if label == 0: # Text GREEN 
+        if label == 0: # PAGE NUMBER
             color = (0, 255, 0)
-        elif label == 1: # First line RED
+        elif label == 1: # TEST
             color = (0, 0, 255)
-        elif label == 2: # Last line BLUE
+        elif label == 2: # TITLE
             color = (255, 0, 0)
-        else: # Title WHITE
-            color = (255, 255, 255)
+        else: # UNANNOTATED
+            color = (255, 255, 0)
 
         # Draw center point
         x = int(x_center * w)
@@ -68,10 +68,10 @@ def main():
     logging.basicConfig(level=args.logging_level,force=True)
     os.makedirs(args.save, exist_ok=True)
     
-    yolo_files = [filename for filename in os.listdir(args.yolo) if filename.endswith(".yolo")]
+    yolo_files = [filename for filename in os.listdir(args.yolo) if filename.endswith(".txt")]
     
     for yolo_file in yolo_files:
-        img_filename = yolo_file.replace(".yolo", ".jpg")
+        img_filename = yolo_file.replace(".txt", ".jpg")
         img_path = os.path.join(args.images, img_filename)
         save_path = os.path.join(args.save, img_filename.replace(".jpg", "-bboxes.jpg"))
         yolo_path = os.path.join(args.yolo, yolo_file)

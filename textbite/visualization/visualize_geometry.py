@@ -32,15 +32,26 @@ def parse_arguments():
 
 def render_geometry(image, geometry: PageGeometry):
     for line in geometry.lines:
-        if line.parent: # PARENT RED
-            start = (int(line.center.x) + 20, int(line.center.y))
-            end = (int(line.parent.center.x) + 20, int(line.parent.center.y))
-            cv2.line(image, start, end, (0, 0, 255), 7)
+        # if line.parent: # PARENT RED
+        #     start = (int(line.center.x) + 20, int(line.center.y))
+        #     end = (int(line.parent.center.x) + 20, int(line.parent.center.y))
+        #     cv2.line(image, start, end, (0, 0, 255), 7)
 
         if line.child: # CHILD GREEN
             start = (int(line.center.x), int(line.center.y))
             end = (int(line.child.center.x), int(line.child.center.y))
             cv2.line(image, start, end, (0, 255, 0), 7)
+
+    children_lines = [line.child for line in geometry.lines if line.child is not None]
+    first_lines = list(set(geometry.lines) - set(children_lines))
+    paragraphs = [[line] + [i for i in line.children_iterator()] for line in first_lines]
+
+    for paragraph in paragraphs:
+        x_min = min(line.bbox.xmin for line in paragraph)
+        y_min = min(line.bbox.ymin for line in paragraph)
+        x_max = max(line.bbox.xmax for line in paragraph)
+        y_max = max(line.bbox.ymax for line in paragraph)
+        cv2.rectangle(image, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (255, 0, 0), 3)
 
     return image
 
@@ -64,10 +75,14 @@ def main():
             logging.warning(f"XML file corresponding to image {image_filename} not found. Skipping.")
             continue
         
+        img_not_split = render_geometry(img.copy(), geometry)
         if args.split:
-            geometry.split_geometry()
+            geometry.split_geometry_into_paragraphs()
 
         img = render_geometry(img, geometry)
+
+        # Concatenate images
+        img = cv2.hconcat([img_not_split, img])
         save_path = os.path.join(args.save, image_filename.replace(".jpg", "-geometry.jpg"))
         cv2.imwrite(save_path, img)
 
